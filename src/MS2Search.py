@@ -244,7 +244,7 @@ def splitList(l, n):
     n = int(np.ceil(len(l)/float(n)))
     return list([l[i:i + n] for i in range(0, len(l), n)])
 
-def createM1SpectrumfromM0(spectra,massIncrease = 1.0086,numFrags=5):
+def createM1SpectrumfromM0(spectra,massIncrease = 1.003,numFrags=5):
 
     if len(spectra) > 0:
         newSpectra = []
@@ -544,7 +544,7 @@ def getMatricesForGroup(trees,spectra,possCompounds,possIsotopes,isotope,res,clu
         for key, val in isotopeDictFull.items():
             isotopeSpectras = val[1]
             for spec, num in zip(isotopeSpectras, range(len(isotopeSpectras))):
-                tempKey = ((str(key[0]), num), key[1], key[2] + 1.0083, (key[3], num))
+                tempKey = ((str(key[0]), num), key[1], key[2] + 1.003, (key[3], num))
                 isotopeDict2[tempKey] = [key[1], spec]
         isotopeKeys = list(isotopeDict2.keys())
         isotopeDict = {key: [val[0], collapseAsNeeded(val[1], res)] for key, val in isotopeDict2.items()}
@@ -642,7 +642,7 @@ def inScan(fragments,candidate_mz,ppmThresh=10):
 
 def inScanIso(fragments,candidate_mz,ppmThresh=10):
     if type(fragments) != type(str()):
-        if any(abs(candidate_mz - x) / candidate_mz / (1e-6) < ppmThresh for x in fragments) and any(abs(candidate_mz-1.0086 - x)/(candidate_mz-1.0086)/(1e-6) < ppmThresh for x in fragments):
+        if any(abs(candidate_mz - x) / candidate_mz / (1e-6) < ppmThresh for x in fragments) and any(abs(candidate_mz-1.003 - x)/(candidate_mz-1.003)/(1e-6) < ppmThresh for x in fragments):
             return True
         else:
             return False
