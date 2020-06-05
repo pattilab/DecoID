@@ -11,7 +11,7 @@ PyInstaller.__main__.run([
     "--hidden-import=sklearn.tree._utils",    #'--windowed',
     "--hidden-import=sklearn.utils._cython_blas"
     "--additional-hooks-dir=hook-sklearn.linear_model.py",
-    '--add-binary=%s' % 'C:/Users/Ethan/AppData/Local/Programs/Python/Python37/Lib/site-packages/sklearn/.libs/vcomp140.dll;.',
+    '--add-binary=%s' % 'C:/Users/Ethan/AppData/Local/Programs/Python/Python37/Lib/site-packages/sklearn/.libs/vcomp140.dll;.', #need to change to local directory of the .dll file
     '--add-binary=%s' % "databases/mzCloudCompound2TreeLinkagereference.pkl;.",
     '--add-binary=%s' % "databases/mzCloudCompound2TreeLinkageautoprocessing.pkl;.",
     '--add-binary=%s' % "databases/HMDB_experimental.db;.",

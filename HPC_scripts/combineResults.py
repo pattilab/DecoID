@@ -1,7 +1,7 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/"))
-import DecoID
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/DecoID/"))
+from DecoID import DecoID
 import multiprocessing
 
 

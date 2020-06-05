@@ -1,11 +1,10 @@
 import sys
 import os
-import numpy as np
 
-libFile = sys.argv[1]
+#libFile = sys.argv[1]
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/"))
-import DecoID
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/DecoID/"))
+from DecoID import DecoID
 import multiprocessing
 
 filename = sys.argv[2]
@@ -26,7 +25,7 @@ unknowns = bool(int(sys.argv[9]))
 
 if __name__ == '__main__':
     multiprocessing.set_start_method("spawn")
-    decID = DecoID.DecoID(False, libFile, useAuto, numCores,label=str(lam) + "_" )
+    decID = DecoID.DecoID(False, libFile, useAuto, numCores, label=str(lam) + "_")
 
     decID.readData(filename, 2, usePeaks, DDA, massAcc,offset,peakDefinitions=peakFile)
     if unknowns:

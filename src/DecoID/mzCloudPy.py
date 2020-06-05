@@ -15,9 +15,9 @@ if getattr(sys, 'frozen', False):
 elif __file__:
     application_path = os.path.dirname(__file__)
     MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "../databases/mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+        open(os.path.join(application_path, "../../databases/mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
                           "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                                       "../databases/mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                                                       "../../databases/mzCloudCompound2TreeLinkageautoprocessing.pkl"),
                                                           "rb"))}
 
 CACHEFILE = os.path.join(application_path, 'cacheReq')

@@ -1,7 +1,7 @@
 from mzCloudPy import *
 from tkinter import *
 from tkinter import font
-from tkinter import filedialog,ttk,scrolledtext
+from tkinter import filedialog,ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import threading
 from matplotlib.figure import Figure
@@ -12,6 +12,7 @@ from multiprocessing import Queue,Process
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams['figure.dpi'] = 300
+import os
 
 LARGE_FONT = ("Verdana", 12)
 RESOLUTIONS = [-1,0,1,2]
@@ -24,7 +25,7 @@ if getattr(sys, 'frozen', False):
                         "custom"]
 elif __file__:
     application_path = os.path.dirname(__file__)
-    DATABASESELCTION = ["none", os.path.join(application_path,"../databases/MoNA-export-Experimental_Spectra.db"), os.path.join(application_path,"../databases/HMDB_experimental.db"),
+    DATABASESELCTION = ["none", os.path.join(application_path,"../../databases/MoNA-export-Experimental_Spectra.db"), os.path.join(application_path,"../../databases/HMDB_experimental.db"),
                         "custom"]
 
 class decoIDSearch(Tk):
@@ -146,7 +147,7 @@ def createWaitingBox(file,threshold,fragThresh,numCores,useAuto,useRec,useIso,us
     progress['value'] = 1.0
     numCores = int(numCores)
     def runDeco():
-        decID = DecoID.DecoID(False,libFile,useAuto,numCores)
+        decID = DecoID.DecoID(False, libFile, useAuto, numCores)
         decID.readData(file ,2,usePeaks,DDA,massAcc,peakDefinitions=peakFile,offset=offset)
 
         if doDeco:

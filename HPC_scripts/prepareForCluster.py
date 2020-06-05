@@ -1,8 +1,8 @@
 import sys
 import os
 #libFile = "none"
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/"))
-import DecoID
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/DecoID/"))
+from DecoID import DecoID
 import multiprocessing
 
 
@@ -22,5 +22,5 @@ if __name__ == '__main__':
     decID = DecoID.DecoID(False, libFile, useAuto, numCores)
     decID.readData(file, 2, usePeaks, DDA, massAcc,peakDefinitions=peakFile)
     #decID.identifyUnknowns(iso=useIso)
-    DecoID.DecoID.prepareForCluster(decID,numFiles)
+    DecoID.DecoID.prepareForCluster(decID, numFiles)
 

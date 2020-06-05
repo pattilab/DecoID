@@ -1,5 +1,6 @@
-import customDBpy
-import mzCloudPy
+import customDBpy#, mzCloudPy #uncomment for mzCloud access, requires github install
+
+
 def warn(*args, **kwargs):
     pass
 import warnings
@@ -10,8 +11,8 @@ if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(sys.executable)
 elif __file__:
     application_path = os.path.dirname(__file__)
-sys.path.append(os.path.join(application_path,"..","src/"))
-from multiprocessing import Queue, Process,Manager,Value,Lock,set_start_method
+#sys.path.append(os.path.join(application_path,"..","src/DecoID/"))
+from multiprocessing import Queue, Process,Manager,Value,Lock
 from threading import Thread
 import time
 import gzip
