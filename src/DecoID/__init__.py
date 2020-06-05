@@ -1,3 +1,3 @@
-from DecoID import DecoID
-from MS2Search import readRawDataFile
-from MS2Search import flatten
+import MS2Search
+import customDBpy
+import DecoID
