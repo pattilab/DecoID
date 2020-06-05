@@ -1,3 +1,1 @@
-import MS2Search
-import customDBpy
-import DecoID
+from DecoID import DecoID
