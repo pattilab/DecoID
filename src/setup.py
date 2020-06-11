@@ -27,4 +27,8 @@ setup(
     'License :: OSI Approved :: MIT License',   # Again, pick a license
     'Programming Language :: Python :: 3.7',      #Specify which pyhton versions that you want to support
   ],
+  py_modules=[
+      "DecoID",
+      "customDBpy",
+      "MS2Search"]
 )
