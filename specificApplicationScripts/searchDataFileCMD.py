@@ -1,14 +1,6 @@
-import sys
-import os
+from DecoID.DecoID import DecoID
 
-libFile = "none"
-libFile = "../databases/MoNA-export-Experimental_Spectra.db"
-#libFile = "../databases/IROA.db"
-
-
-sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src/DecoID/"))
-import DecoID
-import multiprocessing
+libFile = "../databases/HMDB_experimental.db"
 
 useAuto = True
 numCores = 10#int(sys.argv[2])

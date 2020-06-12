@@ -1,4 +1,3 @@
-#import mzCloudPy
 
 def warn(*args, **kwargs):
     pass
@@ -10,7 +9,6 @@ if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(sys.executable)
 elif __file__:
     application_path = os.path.dirname(__file__)
-#sys.path.append(os.path.join(application_path,"..","src/DecoID/"))
 from multiprocessing import Queue, Process,Manager,Value,Lock
 from threading import Thread
 import time
@@ -18,7 +16,6 @@ import gzip
 import pickle as pkl
 import dill
 import pandas as pd
-#from .MS2Search import *
 import uuid
 
 import numpy as np
@@ -27,9 +24,7 @@ np.seterr(divide='ignore', invalid='ignore')
 import scipy.optimize as opt
 import sklearn.linear_model as linModel
 
-#import os
 from pyteomics import mzml
-#import sys
 
 if getattr(sys, 'frozen', False):
     application_path = sys._MEIPASS
@@ -801,8 +796,7 @@ def createDictFromString(string, resolution):
 
 
 class DecoID():
-    def __init__(self,useCache,libFile,useAuto = False,numCores=1,resolution = 2,label=""):
-        self.useCache = useCache
+    def __init__(self,libFile,useAuto = False,numCores=1,resolution = 2,label=""):
         self.libFile = libFile
         self.useDBLock = False
         if ".tsv" in libFile:
@@ -822,7 +816,6 @@ class DecoID():
                 print("bad library file: ", libFile)
                 return -1
             self.lib = customDBpy
-            self.useCache = False
             self.cachedReq = "none"
             self.ms_ms_library = "custom"
             self.useAuto = useAuto
@@ -902,14 +895,12 @@ class DecoID():
                print("bad library file: ", libFile)
                return -1
             self.lib = customDBpy
-            self.useCache = False
             self.cachedReq = "none"
             self.ms_ms_library = "custom"
             self.useAuto = useAuto
 
         elif ".db" in libFile:
             self.lib = customDBpy
-            self.useCache = False
             self.cachedReq = "none"
             self.ms_ms_library = "custom"
             self.useAuto = useAuto
@@ -921,25 +912,6 @@ class DecoID():
             self.useDBLock = True
             self.lib = mzCloudPy
             self.ms_ms_library = "mzCloud"
-            if useCache:
-                manager = Manager()
-                self.cachedReq = manager.dict()
-                good = True
-                try:
-                    fp = gzip.open(self.lib.CACHEFILE + ".cache", "rb")
-                    cacheDict = pkl.load(fp)
-                except:
-                    good = False
-                if good:
-                    chunkSize = 500
-                    allKeys = list(cacheDict.keys())
-                    if len(allKeys) > 0:
-                        for smallChunks in splitList(allKeys, max([1, int(len(allKeys) / chunkSize)])):
-                            self.cachedReq.update({key: cacheDict[key] for key in smallChunks})
-                    print(len(self.cachedReq), " cached trees")
-                    fp.close()
-            else:
-                self.cachedReq = "none"
             self.library = ["reference"]
             self.useAuto = useAuto
 
@@ -1209,15 +1181,7 @@ class DecoID():
 
             t.join()
             t2.join()
-        if self.useCache:
-            chunkSize = 500
-            fp = gzip.open(self.lib.CACHEFILE + ".cache", "wb")
-            allKeys = list(self.cachedReq.keys())
-            newDict = dict()
-            for smallChunks in splitList(allKeys, max([1, int(len(allKeys) / chunkSize)])):
-                newDict.update({key: self.cachedReq[key] for key in smallChunks})
-            pkl.dump(newDict, fp)
-            fp.close()
+
 
     def sendCompleteSamples(self, data2Send,q):
         for x in data2Send:
@@ -1679,9 +1643,9 @@ if getattr(sys, 'frozen', False):
 elif __file__:
     application_path = os.path.dirname(__file__)
     MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "../../databases/mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
         "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "../../databases/mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
                                         "rb"))}
 
 timeout = 30
@@ -1692,7 +1656,7 @@ class customDBpy():
     def __init__(self):
         pass
     @staticmethod
-    def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library="none", cache="none",
+    def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library="none", key="none",
                                  resolution=2):
 
         possCompounds = set()
@@ -1725,20 +1689,12 @@ class customDBpy():
         possIsotopes = {key[:-2] for key in possIsotopes}
         return trees2, possCompounds, possIsotopes
 
-class keys():
-    def __init__(self):
-        pass
-
-    HEADERSSPEC = {
-        'V1-API-Secret': "##########",
-        'cache-control': "no-cache",
-        'Postman-Token': "##########"
-        }
-    HEADERSCOMP = {
-        'V1-API-Secret': "##########",
-        'cache-control': "no-cache",
-        'Postman-Token': "##########"
-        }
+class Keys():
+    def __init__(self,api_code):
+        self.HEADER = {
+            'V1-API-Secret': api_code,
+            'cache-control': "no-cache",
+            }
     SPECTRAURL = "https://mzcloud.org/api/v1/LIBRARY/trees/TREENUMBER/spectra"
     COMPOUNDURL = "https://mzcloud.org/api/v1/LIBRARY/compounds"
 
@@ -1746,8 +1702,9 @@ class mzCloudPy():
     def __init__(self):
         pass
     @staticmethod
-    def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library=["reference"], cacheReq="none"):
+    def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library=["reference"], key="none"):
 
+        keys = Keys(key)
         # make list of isolation window range
         centerMz = [lowerBound, upperBound]
         centerMz[0] = int(np.floor(centerMz[0]))
@@ -1776,7 +1733,7 @@ class mzCloudPy():
                 possIsotopes = possIsotopes.union({tuple(x) for x in
                                                    possIsotopesTemp})  # if x[2] >= centerMzOrig - isolationWidth - 1 and x[2] <= centerMzOrig - isolationWidth}
 
-        trees = mzCloudPy.getTreesAsync(possIsotopes.union(possCompounds), cache=cacheReq)
+        trees = mzCloudPy.getTreesAsync(possIsotopes.union(possCompounds),keys)
 
         return trees, possCompounds, possIsotopes
 
@@ -1788,7 +1745,7 @@ class mzCloudPy():
         mzs = {np.round(x["MZ"], resolution): x["Abundance"] for x in spectra["Peaks"]}
         return mzs
     @staticmethod
-    def getTreesAsync(trees, calibration="recalibrated", maxRetries=3, cache="none", maxMass=MAXMASS, resolution=2):
+    def getTreesAsync(trees,keys, calibration="recalibrated", maxRetries=3, cache="none", maxMass=MAXMASS, resolution=2):
         libraryDict = {"a": "autoprocessing", "r": "reference"}
         requestTuple = []
         keyList = []
@@ -1822,7 +1779,7 @@ class mzCloudPy():
                 querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
                 payload = ""
                 requestTuple.append(
-                    grequests.get(url, data=payload, headers=keys.HEADERSSPEC, params=querystring, timeout=timeout))
+                    grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=timeout))
             requestTuple = tuple(requestTuple)
             responsesNew = grequests.map(requestTuple, size=CONCURRENTREQUESTMAX)
             for response, tree in zip(responsesNew, errors):
@@ -1837,21 +1794,7 @@ class mzCloudPy():
         keyList = [keyList[x] for x in range(len(keyList)) if x not in errors]
         output = {key: mzCloudPy.getAllSpectraInTree(mzCloudPy.reformatSpectraDictList(json.loads(val.text)), maxMass, resolution) for
                   key, val in zip(keyList, responses)}
-        # output = {key:reformatSpectraDictList(json.loads(val.text)) for key,val in zip(keyList,responses)}
-        if type(cache) != type(""):
-            tempDict = {}
-            for x in toCache:
-                try:
-                    tempDict[(x[0], x[1])] = output[x[1]]
-                except:
-                    pass
-            output.update(alreadyCached)
-            chunkSize = 500
-            allKeys = list(tempDict.keys())
-            if len(allKeys) > 0:
-                for smallChunks in splitList(allKeys, max([1, int(len(allKeys) / chunkSize)])):
-                    cache.update({key: tempDict[key] for key in smallChunks})
-            # print(len(tempDict),len(output))
+
         return output
     @staticmethod
     def reformatSpectraDictList(dictList):
@@ -1881,7 +1824,7 @@ class mzCloudPy():
                 pass
         return dat
     @staticmethod
-    def getListofSpectrainTree(trees, calibration="recalibrated", library="reference"):
+    def getListofSpectrainTree(trees,keys, calibration="recalibrated", library="reference"):
         response = 1
         requestTuple = []
         treeOrder = list(trees)
@@ -1890,7 +1833,7 @@ class mzCloudPy():
             url = url.replace("LIBRARY", library)
             querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
             payload = ""
-            requestTuple.append(grequests.get(url, data=payload, headers=keys.HEADERSSPEC, params=querystring, timeout=40))
+            requestTuple.append(grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=40))
         requestTuple = tuple(requestTuple)
         responses = grequests.map(requestTuple)
 
@@ -1904,7 +1847,7 @@ class mzCloudPy():
                 querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
                 payload = ""
                 requestTuple.append(
-                    grequests.get(url, data=payload, headers=keys.HEADERSSPEC, params=querystring, timeout=40))
+                    grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=40))
             requestTuple = tuple(requestTuple)
             responsesNew = grequests.map(requestTuple)
             for error, res in zip(errors, responsesNew):
@@ -1919,11 +1862,11 @@ class mzCloudPy():
                   zip(responses, treeOrder)}
         return output
     @staticmethod
-    def generateCompoundID2SpectralIDIndexedByM_ZStrict(numPerPage=100, library="reference"):
+    def generateCompoundID2SpectralIDIndexedByM_ZStrict(numPerPage=100, key="none",library="reference"):
         # get number of items
-
+        keys = Keys(key)
         totalCompounds = json.loads(grequests.map((grequests.get(keys.COMPOUNDURL.replace("LIBRARY", library), data="",
-                                                                 headers=keys.HEADERSCOMP, params={"page": str(1),
+                                                                 headers=keys.HEADER, params={"page": str(1),
                                                                                               "pageSize": "5",
                                                                                               "newer": "2000-09-03"}),))[
                                         0].text)["Total"]
@@ -1939,7 +1882,7 @@ class mzCloudPy():
                 treeDict.update({(key, comp, compounds[comp]["SearchCompoundName"]): val for key, val in
                                  mzCloudPy.reformatSpectraDictList(compounds[comp]["SpectralTrees"]).items()})
 
-            allSpectra = mzCloudPy.getListofSpectrainTree(list(treeDict.keys()))
+            allSpectra = mzCloudPy.getListofSpectrainTree(list(treeDict.keys()),keys)
 
             for tree in treeDict:
                 posValsRounded = []
