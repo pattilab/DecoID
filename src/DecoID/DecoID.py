@@ -796,7 +796,7 @@ def createDictFromString(string, resolution):
 
 
 class DecoID():
-    def __init__(self,libFile,useAuto = False,numCores=1,resolution = 2,label=""):
+    def __init__(self,libFile,useAuto = False,numCores=1,resolution = 2,label="",api_key="none"):
         self.libFile = libFile
         self.useDBLock = False
         if ".tsv" in libFile:
@@ -918,6 +918,8 @@ class DecoID():
 
             if useAuto:
                 self.library.append("autoprocessing")
+
+        self.key = api_key
         self.numCores = numCores
         self.recursive = False
         self.label = label
@@ -1426,11 +1428,11 @@ class DecoID():
         if self.useDBLock:
             with dbLock:
                 trees, possCompounds, possIsotopes = self.lib.getCanidateCompoundTrees(mode, upperBound, lowerBound, self.iso,
-                                                                          self.library,self.cachedReq)
+                                                                          self.library,self.key)
         else:
             trees, possCompounds, possIsotopes = self.lib.getCanidateCompoundTrees(mode, upperBound, lowerBound,
                                                                                    self.iso,
-                                                                                   self.library, self.cachedReq)
+                                                                                   self.library, self.key,)
         featureGroups = {x["group"]:[] for x in allSamples}
         [featureGroups[x["group"]].append(x) for x in allSamples]
 
@@ -1633,20 +1635,21 @@ class DecoID():
 
 import grequests
 import json
-if getattr(sys, 'frozen', False):
-    application_path = sys._MEIPASS
-    MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-        "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                        "rb"))}
-elif __file__:
-    application_path = os.path.dirname(__file__)
-    MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-        "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                        "rb"))}
+#if getattr(sys, 'frozen', False):
+# application_path = sys._MEIPASS
+# MZCOMPOUNDTREELINK = {"reference": pkl.load(
+#     open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+#     "autoprocessing": pkl.load(open(os.path.join(application_path,
+#                                                  "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+#                                     "rb"))}
+# elif __file__:
+
+application_path = os.path.dirname(__file__)
+MZCOMPOUNDTREELINK = {"reference": pkl.load(
+    open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+    "autoprocessing": pkl.load(open(os.path.join(application_path,
+                                                 "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                    "rb"))}
 
 timeout = 30
 CONCURRENTREQUESTMAX = 1
@@ -1763,7 +1766,7 @@ class mzCloudPy():
                 toCache.append([library, tree])
                 keyList.append(tree)
                 requestTuple.append(
-                    grequests.get(url, data=payload, headers=keys.HEADERSSPEC, params=querystring, timeout=timeout))
+                    grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=timeout))
         requestTuple = tuple(requestTuple)
         responses = grequests.map(requestTuple, size=CONCURRENTREQUESTMAX)
         errors = [key for key in range(len(keyList)) if
