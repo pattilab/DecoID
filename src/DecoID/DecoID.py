@@ -1635,21 +1635,21 @@ class DecoID():
 
 import grequests
 import json
-#if getattr(sys, 'frozen', False):
-# application_path = sys._MEIPASS
-# MZCOMPOUNDTREELINK = {"reference": pkl.load(
-#     open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-#     "autoprocessing": pkl.load(open(os.path.join(application_path,
-#                                                  "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-#                                     "rb"))}
-# elif __file__:
+if getattr(sys, 'frozen', False):
+    application_path = sys._MEIPASS
+    MZCOMPOUNDTREELINK = {"reference": pkl.load(
+        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+        "autoprocessing": pkl.load(open(os.path.join(application_path,
+                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                        "rb"))}
+elif __file__:
 
-application_path = os.path.dirname(__file__)
-MZCOMPOUNDTREELINK = {"reference": pkl.load(
-    open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-    "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                 "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                    "rb"))}
+    application_path = os.path.dirname(__file__)
+    MZCOMPOUNDTREELINK = {"reference": pkl.load(
+        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+        "autoprocessing": pkl.load(open(os.path.join(application_path,
+                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                        "rb"))}
 
 timeout = 30
 CONCURRENTREQUESTMAX = 1
