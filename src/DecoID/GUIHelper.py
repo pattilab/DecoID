@@ -1,4 +1,4 @@
-from mzCloudPy import *
+#from mzCloudPy import *
 from tkinter import *
 from tkinter import font
 from tkinter import filedialog,ttk
@@ -7,12 +7,14 @@ import threading
 from matplotlib.figure import Figure
 import time
 import gzip
-import DecoID
+from DecoID import *
 from multiprocessing import Queue,Process
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams['figure.dpi'] = 300
 import os
+import numpy as np
+import pickle as pkl
 
 LARGE_FONT = ("Verdana", 12)
 RESOLUTIONS = [-1,0,1,2]
@@ -147,7 +149,7 @@ def createWaitingBox(file,threshold,fragThresh,numCores,useAuto,useRec,useIso,us
     progress['value'] = 1.0
     numCores = int(numCores)
     def runDeco():
-        decID = DecoID.DecoID(False, libFile, useAuto, numCores)
+        decID = DecoID(False, libFile, useAuto, numCores)
         decID.readData(file ,2,usePeaks,DDA,massAcc,peakDefinitions=peakFile,offset=offset)
 
         if doDeco:

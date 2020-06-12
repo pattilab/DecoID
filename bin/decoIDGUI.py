@@ -8,10 +8,9 @@ if __name__ == '__main__':
     #windll.shcore.SetProcessDpiAwareness(1)
     sys.path.append(os.path.join(os.path.dirname(__file__),"..","src","DecoID/"))
     import DecoID
-    import mzCloudPy
-    import customDBpy
-    import keys
-    import MS2Search
+    # import mzCloudPy
+    # import customDBpy
+    # import MS2Search
     from GUIHelper import *
 
     app = decoIDSearch()

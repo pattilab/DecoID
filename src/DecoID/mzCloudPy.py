@@ -1,7 +1,7 @@
 import grequests
 import json
 import os
-from keys import *
+from .keys import *
 import pickle as pkl
 
 import sys
@@ -21,7 +21,8 @@ elif __file__:
                                                           "rb"))}
 
 CACHEFILE = os.path.join(application_path, 'cacheReq')
-from MS2Search import *
+
+from .MS2Search import *
 
 
 

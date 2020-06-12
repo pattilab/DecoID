@@ -7,7 +7,6 @@ import sklearn.linear_model as linModel
 import os
 from pyteomics import mzml
 import sys
-import sklearn.utils._cython_blas
 
 if getattr(sys, 'frozen', False):
     application_path = sys._MEIPASS

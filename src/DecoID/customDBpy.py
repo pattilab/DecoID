@@ -6,7 +6,6 @@ if getattr(sys, 'frozen', False):
 elif __file__:
     application_path = os.path.dirname(__file__)
 
-from MS2Search import *
 
 def getCanidateCompoundTrees(mode, upperBound,lowerBound, isotope=False, library="none",cache="none",resolution=2):
 
