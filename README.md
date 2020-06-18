@@ -49,7 +49,7 @@ User interface documentation and guide available at DecoID/DecoIDGUI_manual.pdf
 
 Total size is approximatly 1gb and includes binaries of HMDB and MoNA. Installation time is dependent on network speed. With around 100 Mb/sec download speed, total time to download/extract/run was approximatly 5 minutes.
 
-API Documentation: 
+API Documentation: https://decoid.readthedocs.io/
 
 ## Demo
 
