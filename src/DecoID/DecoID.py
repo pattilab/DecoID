@@ -105,8 +105,14 @@ def deconvolveLASSO(A, b, lb, ub, resPenalty=10,numRepeats = 10):
              np.abs(np.subtract(flatten(foundSpectra), flatten(b))))
         return [flatten(params),s2nR]
 
-def dotProductSpectra(foundSpectra,b):
 
+def dotProductSpectra(foundSpectra,b):
+    """
+
+    :param foundSpectra:
+    :param b:
+    :return:
+    """
     if type(foundSpectra) == type(dict()):
         mzs = set(foundSpectra.keys()).intersection(set(b.keys()))
         num = np.sum([foundSpectra[x]*b[x] for x in mzs])
@@ -356,71 +362,6 @@ def clusterSpectra(samples,peakData):
 
 
 
-        #def mergeCluster(cluster1,cluster2):
-        #     return {"mergedSpectrum": mergeSpectrum(cluster1["mergedSpectrum"],cluster2["mergedSpectrum"]),
-        #             "allSpec":cluster1["allSpec"]+cluster2["allSpec"],"ids":cluster1["ids"]+cluster2["ids"],
-        #             "mzs": cluster1["mzs"]+cluster2["mzs"],"rts":cluster1["rts"]+cluster2["rts"]}
-        #
-        # ppmWindow = lambda m: mzTol * 1e-6 * m
-        #
-        # uniqueMzs = list(set(mzs))
-        # absUniqueMzs = []
-        # for x in range(len(uniqueMzs)):
-        #     win = ppmWindow(uniqueMzs[x])
-        #     good = True
-        #     for x2 in absUniqueMzs:
-        #         if abs(x2 - uniqueMzs[x]) <= win:
-        #             good = False
-        #             break
-        #     if good:
-        #         absUniqueMzs.append(np.round(uniqueMzs[x],6))
-        #
-        #
-        # prelimClusters = {mz:[] for mz in absUniqueMzs}
-        #
-        # for mz in absUniqueMzs:
-        #     win = ppmWindow(mz)
-        #     toRemove = []
-        #     for m,r,o,i in zip(mzs,rts,order,range(len(order))):
-        #         if abs(mz-m) <= win:
-        #             prelimClusters[mz].append([o,m,r])
-        #             toRemove.append(i)
-        #
-        #     mzs = [mzs[x] for x in range(len(order)) if x not in toRemove]
-        #     rts = [rts[x] for x in range(len(order)) if x not in toRemove]
-        #     order = [order[x] for x in range(len(order)) if x not in toRemove]
-        # totalClusters = []
-        # for c in prelimClusters:
-        #     tempClust = [{"mergedSpectrum":spectra[id],"allSpec":[spectra[id]],"ids":[id],"mzs":[mz],"rts":[rt]} for id,mz,rt in prelimClusters[c]]
-        #     delta = (1-minScores)/numRounds
-        #     thresh = 1.0
-        #     numSame = 0
-        #     #rd.seed(1300)
-        #
-        #     for r in range(3*numRounds):
-        #         if thresh >= minScores:
-        #             thresh = thresh - delta
-        #         rd.shuffle(tempClust)
-        #         numBefore = len(tempClust)
-        #         index = 0
-        #         for c in deepcopy(tempClust):
-        #             index+=1
-        #             for cp in range(tempClust.index(c)):
-        #                 if dotProductSpectra(c["mergedSpectrum"][0],tempClust[cp]["mergedSpectrum"][0]) >= .5:
-        #                     tempClust[cp] = mergeCluster(tempClust[cp],c)
-        #                     tempClust.remove(c)
-        #                     break
-        #
-        #             #clusters = [clusters[x] for x in range(len(clusters)) if x not in toRemove]
-        #         if len(tempClust) == numBefore and abs(thresh-minScores) < .01:
-        #             numSame += 1
-        #             if numSame == 2:
-        #                 break
-        #         else:
-        #             numSame = 0
-        #     #print(numRounds)
-        #     #rd.seed(datetime.now())
-        #     totalClusters += tempClust
     return clustFormatted
 
 
@@ -688,6 +629,17 @@ def takeClosest(myList, myNumber):
 
 
 def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=0.65,tic_cutoff=5):
+   """
+
+   :param filename:
+   :param maxMass:
+   :param resolution:
+   :param useMS1:
+   :param ppmWidth:
+   :param offset:
+   :param tic_cutoff:
+   :return:
+   """
    try:
         delete = False
         if ".mzML" not in filename:
@@ -796,7 +748,17 @@ def createDictFromString(string, resolution):
 
 
 class DecoID():
+    """
+
+    :param libFile:
+    :param useAuto:
+    :param numCores:
+    :param resolution:
+    :param label:
+    :param api_key:
+    """
     def __init__(self,libFile,useAuto = False,numCores=1,resolution = 2,label="",api_key="none"):
+
         self.libFile = libFile
         self.useDBLock = False
         if ".tsv" in libFile:
@@ -943,6 +905,18 @@ class DecoID():
 
 
     def readData(self,filename,resolution,peaks,DDA,massAcc,offset=.65,peakDefinitions = "",tic_cutoff=0):
+        """
+
+        :param filename:
+        :param resolution:
+        :param peaks:
+        :param DDA:
+        :param massAcc:
+        :param offset:
+        :param peakDefinitions:
+        :param tic_cutoff:
+        :return:
+        """
         samples, ms1 = readRawDataFile(filename, MAXMASS, resolution, peaks,offset=offset,tic_cutoff=tic_cutoff,ppmWidth=massAcc)
         if samples != -1:
             self.samples = samples
@@ -1079,6 +1053,15 @@ class DecoID():
                 time.sleep(1)
 
     def identifyUnknowns(self,resPenalty=100,percentPeaks=0.01,iso=False,ppmThresh = 10,dpThresh = 20):
+        """
+
+        :param resPenalty:
+        :param percentPeaks:
+        :param iso:
+        :param ppmThresh:
+        :param dpThresh:
+        :return:
+        """
         try: self.samples
         except: print("datafile not loaded");return -1
         self.iso = iso
@@ -1134,6 +1117,15 @@ class DecoID():
 
 
     def searchSpectra(self,verbose,resPenalty = 100,percentPeaks=0.01,iso=False,threshold = 0.0):
+        """
+
+        :param verbose:
+        :param resPenalty:
+        :param percentPeaks:
+        :param iso:
+        :param threshold:
+        :return:
+        """
         try: self.samples
         except: print("datafile not loaded");return -1
         q = Queue(maxsize=1000)
@@ -1298,6 +1290,11 @@ class DecoID():
                 time.sleep(1)
 
     def prepareForCluster(self,numberOfFiles):
+        """
+
+        :param numberOfFiles:
+        :return:
+        """
         # if self.recursive:
         #     tempObject = DecoID.from_DecoID(self)
         #     tempObject.filename+="_unknowns_"
@@ -1324,6 +1321,13 @@ class DecoID():
 
     @staticmethod
     def combineResults(filenames,newFilename,endings = ["_scanInfo.csv","_decoID.csv",".DecoID"]):
+        """
+
+        :param filenames:
+        :param newFilename:
+        :param endings:
+        :return:
+        """
         goodFiles = []
         for file in filenames:
             try:
@@ -1574,35 +1578,16 @@ class DecoID():
             #q.put([[],0,[0 for _ in spectrum]])
             return [[],0,[0 for _ in spectrum]]
 
-
-            # score the components found in the deconvolution
-
-        #    numComponents = len([x for x in res if x > 0])
-
-        #
-        #     scores,components = metaboliteSensitivity(spectra[-1], matrices[-1], res, metIDs[-1], spectraTrees[-1],masses[-1],centerMz,DDA,massAcc,fragments)
-        #
-        #     result = {(met, specID, mass, name, safeDivide(comp, sum(res))): coeff for
-        #               met, name, specID, coeff, mass, comp in
-        #               zip(metIDs[-1], metNames[-1], spectraIDs[-1], scores, masses[-1], res)}
-        #
-        #     # combine isotopes together
-        #     result = cleanIsotopes(result)
-        #
-        #     # output result
-        #     success = False
-        #     while not success:
-        #         try:
-        #             q.put([result, centerMz, id, rt, s2n, indices[-1], numComponents, fragments, decoSpec,components ], timeout=5)
-        #             success = True
-        #         except:
-        #             pass
-        # else:
-        #     q.put([[], centerMz, id, rt, 0, [], 0, [], [0 for _ in spectra[0]],{}])
-
-
     @staticmethod
     def toSiriusOutput(filename,polarity,spectype="o",ppmErr=10):
+        """
+
+        :param filename:
+        :param polarity:
+        :param spectype:
+        :param ppmErr:
+        :return:
+        """
         data = pd.read_csv(filename)
         dir = filename.replace("_scanInfo.csv","_sirius/")
         os.mkdir(dir)
