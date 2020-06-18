@@ -54,7 +54,8 @@ lam = 1 #LASSO regularizing coefficient (recommendation: 1 for DDA, 100 for DIA)
 
 if __name__ == '__main__':
     decID = DecoID(libFile,numCores) #create DecoID object
-    decID.readData(file, 2, usePeaks, DDA, massAcc,peakDefinitions=peakfile) #load in datafile
+    decID.readData(file, 2, useMS1, DDA, massAcc,peakDefinitions=peakfile) #load in datafile
     decID.identifyUnknowns() #identify compounds for inclusion in on-the-fly unknown library
     decID.searchSpectra("y", lam , iso = useIso) #deconvolve and identify spectra
+
 ```
