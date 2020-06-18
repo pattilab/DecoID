@@ -10,12 +10,19 @@ Package has been tested with Python 3.7
 Package has the following dependencies:
 
 numpy (v1.18.1)
+
 sklearn (v0.22.1)
+
 pandas (v1.0.1)
+
 dill (v0.3.1.1)
+
 scipy (v1.4.1)
+
 pyteomics (v4.2)
+
 grequests (v0.4.0)
+
 
 In order to process vendor formatted data without manual conversion, MS-Convert (http://proteowizard.sourceforge.net/tools.shtml) needs to be installed and added to PATH. 
 
