@@ -13,5 +13,5 @@ Other Helpful Functions
 -----------------------
 
 .. automodule:: DecoID.DecoID
-    :members: readRaw
+    :members: dotProductSpectra,readRawDataFile,
 

@@ -1580,14 +1580,7 @@ class DecoID():
 
     @staticmethod
     def toSiriusOutput(filename,polarity,spectype="o",ppmErr=10):
-        """
 
-        :param filename:
-        :param polarity:
-        :param spectype:
-        :param ppmErr:
-        :return:
-        """
         data = pd.read_csv(filename)
         dir = filename.replace("_scanInfo.csv","_sirius/")
         os.mkdir(dir)
