@@ -7,14 +7,21 @@ Welcome to DecoID's documentation!
 ==================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
+   examples
+   code
+   install
+
+About DecoID
+============
+
+DecoID is a Python package for analyzing, identifying, and deconvolving
+metabolomics
 
 
-Indices and tables
-==================
+Contact
+=======
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+Please email estancliffe@wustl.edu with any questions or issues
