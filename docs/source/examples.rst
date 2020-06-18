@@ -163,16 +163,49 @@ etc     etc                     etc   etc            etc              etc       
 * Abundance: The normalized regression coefficient of this compound in the deconvolution. Note: this should not be used for comparative/quantitative purposes.
 * componentID: compound ID of the component matched to. If this field is "original" then this is the acquired spectrum. Residual is the error between the reconstructed spectrum and the acquired.
 
-**<fn>.DecoID** is a gzipped python pickle file that contains all the information provided in the previous two output files but in a format that allows for easier analysis and visualation through
+**<fn>.DecoID** is a gzipped pickle file that contains all the information provided in the previous two output files but in a format that allows for easier analysis and visualation through
 the DecoID user interface.
 
-Usage with DDA data
+Example Usage
 --------------------
 
+Regardless of data type the following parameters are required:::
 
-Usage with DIA data
--------------------
+    from DecoID.DecoID import DecoID
+    libFile = "DecoID/databases/HMDB_experimental.db" #path to database
+    numCores = 10 # of parallel processes to use
+    file = "DecoID/exampleData/Asp-Mal_1uM_5Da.mzML" #path to datafile
+    peakfile = "DecoID/exampleData/peak_table.csv" #path to peak information file
 
+    useMS1 = True #use MS1 data if available
+    massAcc = 10 #Mass accuracy of instrument
+    res = 2 # # of decimal places to round MS/MS peaks.
+
+With this the DecoID object can be instantiated and database parsed:::
+
+    decID = DecoID(libFile,numCores)
+
+Before the raw data can be read-in some data-type specific parameters must be provided:::
+
+    offset = .5 #half of the width of the MS/MS isolation window. Not required for Thermo data.
+    DDA = True #true for DDA, False for DIA
+
+Now the raw MS/MS data can be read:::
+
+    decID.readData(file, 2, useMS1, DDA, massAcc,peakDefinitions=peakfile)
+
+With the data read, the search parameters can be defined:::
+
+    lam = 1 # LASSO regression coefficient. The higher this is the more sparse a solution will be found. Recommend 1 for DDA and 100 for DIA.
+    useIso = True # Predict M+1 isotopologue spectra to remove contamination from orphan isotopologues
+
+Optionally, acquired pure MS/MS spectra can be used to deconvolve spectra in the datafile if data is from a DDA experiment. To enable this the command below must be run:::
+
+    decID.identifyUnknowns(resPenalty=lam,iso=useIso)
+
+Now, the datafile can be searched with the command below:::
+
+    decID.searchSpectra("y",lam,iso=useIso)
 
 Advanced Usage
 --------------
@@ -180,9 +213,31 @@ Advanced Usage
 Changing Deconvolution Parameters
 +++++++++++++++++++++++++++++++++
 
+Changing the "lam" parameter in effect allows for a continuum of performance between direct library searching without deconvolution and non-regularized deconvolution.
+
+With::
+
+    lam = float("inf")
+
+You have no deconvolution and standard library searching.
+
+With::
+
+    lam = 0
+
+There is no penalty for more complex solutions.
+
 High Performance Computing
 ++++++++++++++++++++++++++
 
+Documentation in progress. See DecoID/HPC_scripts/
+
 Connection to mzCloud
 +++++++++++++++++++++
+
+Connection to mzCloud is dependent on an access key granted by Thermo-Fisher Scientific. If a key is granted, it must
+be entered during instantiation of the DecoID object and the libFile parameter must be "none":::
+
+    decID = DecoID("none",numCores,api_key="XXXXXXXXXXXX")
+
 

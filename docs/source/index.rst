@@ -18,7 +18,7 @@ About DecoID
 ============
 
 DecoID is a Python package for analyzing, identifying, and deconvolving
-metabolomics
+metabolomic MS/MS spectra using reference databases.
 
 
 Contact
