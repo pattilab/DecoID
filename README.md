@@ -10,12 +10,19 @@ Package has been tested with Python 3.7
 Package has the following dependencies:
 
 numpy (v1.18.1)
+
 sklearn (v0.22.1)
+
 pandas (v1.0.1)
+
 dill (v0.3.1.1)
+
 scipy (v1.4.1)
+
 pyteomics (v4.2)
+
 grequests (v0.4.0)
+
 
 In order to process vendor formatted data without manual conversion, MS-Convert (http://proteowizard.sourceforge.net/tools.shtml) needs to be installed and added to PATH. 
 
@@ -49,7 +56,7 @@ User interface documentation and guide available at DecoID/DecoIDGUI_manual.pdf
 
 Total size is approximatly 1gb and includes binaries of HMDB and MoNA. Installation time is dependent on network speed. With around 100 Mb/sec download speed, total time to download/extract/run was approximatly 5 minutes.
 
-API Documentation: 
+API Documentation: https://decoid.readthedocs.io/
 
 ## Demo
 
