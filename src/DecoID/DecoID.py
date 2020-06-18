@@ -749,8 +749,10 @@ def createDictFromString(string, resolution):
 
 class DecoID():
     """
+    Class for working with and performing a database assisted deconvolution of MS/MS spectra. Deconvolution is done
+    using LASSO regression.
 
-    :param libFile:
+    :param libFile: string
     :param useAuto:
     :param numCores:
     :param resolution:
