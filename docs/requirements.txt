@@ -1,1 +1,7 @@
 dill
+pandas
+sklearn
+numpy
+scipy
+pyteomics
+grequests
