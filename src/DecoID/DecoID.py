@@ -108,21 +108,24 @@ def deconvolveLASSO(A, b, lb, ub, resPenalty=10,numRepeats = 10):
 
 def dotProductSpectra(foundSpectra,b):
     """
+    Computes the normalized dot product (cosine) similarity between two spectra.
 
-    :param foundSpectra:
-    :param b:
-    :return:
+    :param foundSpectra: dict or array like, this is the first spectrum
+    :param b: dict or array like, this is the second spectrum
+    :return: Cosine similarity of the two spectrum in a scale of 0-1
     """
+    #if input spectra are dictionaries
     if type(foundSpectra) == type(dict()):
-        mzs = set(foundSpectra.keys()).intersection(set(b.keys()))
-        num = np.sum([foundSpectra[x]*b[x] for x in mzs])
-        denom = np.sqrt(np.sum([x**2 for x in foundSpectra.values()])*sum([x**2 for x in b.values()]))
+        mzs = set(foundSpectra.keys()).intersection(set(b.keys())) #get shared mzs
+        num = np.sum([foundSpectra[x]*b[x] for x in mzs]) #compute num
+        denom = np.sqrt(np.sum([x**2 for x in foundSpectra.values()])*sum([x**2 for x in b.values()])) #compute denom
         val = num/denom
         return num/denom
+    #if input spectra are lists
     else:
-        b = flatten(b)
+        b = flatten(b) #flatten spectra
         foundSpectra = flatten(foundSpectra)
-        val = np.sum([x*y for x,y in zip(b,foundSpectra) if x > 1e-4 or y > 1e-4])/np.sqrt(np.sum([x**2 for x in foundSpectra])*(np.sum(
+        val = np.sum([x*y for x,y in zip(b,foundSpectra) if x > 1e-4 or y > 1e-4])/np.sqrt(np.sum([x**2 for x in foundSpectra])*(np.sum( #compute value
                 [x**2 for x in b])))
     if np.isnan(val): val = 0
     return val
@@ -630,15 +633,21 @@ def takeClosest(myList, myNumber):
 
 def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=0.65,tic_cutoff=5):
    """
+    Read MS datafile and convert to mzml if necessary. Conversion performs vendor centroiding. MS/MS data along with MS1
+    data are extracted and returned. In addition, the contamination in the MS/MS spectra from co-isolated analytes is
+    computed.
 
-   :param filename:
-   :param maxMass:
-   :param resolution:
-   :param useMS1:
-   :param ppmWidth:
-   :param offset:
-   :param tic_cutoff:
-   :return:
+   :param filename: str, path to MS datafile
+   :param maxMass: float, maximum mass to consider in MS/MS spectra
+   :param resolution: int, number of decimal places to consider to m/z value of MS/MS peaks
+   :param useMS1: bool, read and return MS1 data contained in file
+   :param ppmWidth: float, Mass accuracy of insturment in parts per million
+   :param offset: float, Isolation window width/2. Necessary for non-thermo data
+   :param tic_cutoff: float, Signal cutoff for MS/MS spectra. Spectra below this signal level will be ignored
+   :return: result-list of MS/MS spectra. Each spectrum is a dict giving the precursor mz, retention time, isolation window
+    upper and lower bounds, TIC, contamination level, and scanID
+    ms1Scans-dict where key is the retention time and the value is another dict of m/z:intensity pairs
+
    """
    try:
         delete = False
@@ -752,17 +761,19 @@ class DecoID():
     Class for working with and performing a database assisted deconvolution of MS/MS spectra. Deconvolution is done
     using LASSO regression.
 
-    :param libFile: string
-    :param useAuto:
-    :param numCores:
-    :param resolution:
-    :param label:
-    :param api_key:
+    :param libFile: string, path to database file or "none" to use mzCloud
+    :param useAuto: bool, only applies to mzCloud, True to use autoprocessing library in addition to reference. False
+        to only use reference library
+    :param numCores: int, Number of parralel processes to use.
+    :param resolution: int, Number of decimal places to consider for m/z values of MS/MS peaks
+    :param label: str, optional label to add to the end of output files
+    :param api_key: str, for use of mzCloud api, access key must be entered
     """
     def __init__(self,libFile,useAuto = False,numCores=1,resolution = 2,label="",api_key="none"):
 
         self.libFile = libFile
         self.useDBLock = False
+        #read tsv library file
         if ".tsv" in libFile:
             try:
                 f = open(libFile,"r",encoding = "utf-8")
@@ -786,7 +797,7 @@ class DecoID():
             pkl.dump(self.library, open(libFile.replace(".tsv", ".db"),"wb"))
             print("Library loaded successfully: " + str(
             len(self.library["Positive"]) + len(self.library["Negative"])) + " spectra found")
-
+        #for msp library files
         elif ".msp" in libFile:
             try:
                 mz = -1
@@ -862,7 +873,7 @@ class DecoID():
             self.cachedReq = "none"
             self.ms_ms_library = "custom"
             self.useAuto = useAuto
-
+        #for binrary datbabase files
         elif ".db" in libFile:
             self.lib = customDBpy
             self.cachedReq = "none"
@@ -908,19 +919,22 @@ class DecoID():
 
     def readData(self,filename,resolution,peaks,DDA,massAcc,offset=.65,peakDefinitions = "",tic_cutoff=0):
         """
+        Read in raw MS data into DecoID object.
 
-        :param filename:
-        :param resolution:
-        :param peaks:
-        :param DDA:
-        :param massAcc:
-        :param offset:
-        :param peakDefinitions:
-        :param tic_cutoff:
-        :return:
+        :param filename: str, path to MS datafile
+        :param resolution: int, number of decimal places to consider in MS/MS peaks
+        :param peaks: bool, use MS1 data if available
+        :param DDA: bool, True for DDA data, False for DIA data
+        :param massAcc: float, mass accuracy of instrument in ppm
+        :param offset: float, isolation window width measured from center of window to outer edge.
+        :param peakDefinitions: str, path to peak definition file
+        :param tic_cutoff: float, TIC cutoff for MS/MS spectra. Spectra below this value will be ignored
+        :return: None
         """
+        #read in data
         samples, ms1 = readRawDataFile(filename, MAXMASS, resolution, peaks,offset=offset,tic_cutoff=tic_cutoff,ppmWidth=massAcc)
         if samples != -1:
+            #set object fields
             self.samples = samples
             self.ms1 = ms1
             self.resolution = resolution
@@ -932,6 +946,7 @@ class DecoID():
             if not DDA and not peaks:
                 self.DDA = True
             # samples = samples[:100]
+            #output # of spectra collected
             print(len(self.samples), " MS2 spectra detected")
             fileending = "." + filename.split(".")[-1]
             self.filename = filename.replace(fileending, "")
@@ -940,12 +955,13 @@ class DecoID():
             self.data2WriteFinal = []
             self.outputDataFinal = {}
 
+            #if peak definitions are provided
             if peakDefinitions != "":
                 self.peakData = pd.read_csv(peakDefinitions)
-                self.peakData = self.peakData[["mz","rt_start","rt_end"]]
+                self.peakData = self.peakData[["mz","rt_start","rt_end"]] #read peak info
                 dfIndex = list(self.peakData.index.values)
 
-                if self.DDA:
+                if self.DDA: #if DDA group spectra using peak information
                     i = -1
                     goodSamps = []
                     for samp in samples:
@@ -961,16 +977,17 @@ class DecoID():
                     print("Number of compounds with acquired MS2: ",numGroups)
                     print("Number of spectra to deconvolve: ",len(self.samples))
 
+                #if DIA
                 else:
-                    samplesDict = {x["id"]: x for x in samples}
+                    samplesDict = {x["id"]: x for x in samples} #get unique windows
                     mzGroups = clusterSpectraByMzs([x["center m/z"] for x in samples], [x["id"] for x in samples],
                                                    [x["rt"] for x in samples],list(range(len(samples))) ,self.massAcc)
-                    index = 0
+                    index = 0 #put samples into groups
                     for mz in mzGroups:
                         for m, id in mzGroups[mz]:
                             samplesDict[id]["group"] = index
                         index += 1
-
+            #if peak information is not provided set each ms/ms spectrum as a unique feature
             else:
                 index = 0
                 for samp in samples:
@@ -1056,13 +1073,15 @@ class DecoID():
 
     def identifyUnknowns(self,resPenalty=100,percentPeaks=0.01,iso=False,ppmThresh = 10,dpThresh = 20):
         """
+        Generate the on-the-fly unknown library by searching all spectra first and identifying those that are unknown.
+        These spectra can then be used to deconvolve other spectra. Only applicable to DDA with MS1 collected.
 
-        :param resPenalty:
-        :param percentPeaks:
-        :param iso:
-        :param ppmThresh:
-        :param dpThresh:
-        :return:
+        :param resPenalty: float, lasso regression coefficient. Set to float("inf") for direct searching. Set to 0 for unregularized deconvolution. Reccomend 1 for DDA, 100 for DIA
+        :param percentPeaks: float, filtering parameter, exclude spectra that do not match this fraction of the database peaks
+        :param iso: bool, remove contamination from orphan isotopologues if True, False- do not.
+        :param ppmThresh: float, mass error match tolerance for the resulting hits of the spectra.
+        :param dpThresh: float, dot product match tolerance for the resulting hits of the spectra.
+        :return: None
         """
         try: self.samples
         except: print("datafile not loaded");return -1
@@ -1071,6 +1090,7 @@ class DecoID():
 
         self.resPenalty = resPenalty
 
+        #check datatype
         q = Queue(maxsize=1000)
         if not self.peaks or not self.DDA:
             print("MS1 and DDA Required for Unknown ID Recursion")
@@ -1082,7 +1102,7 @@ class DecoID():
             samplesLeft = []
             sigThresh = 4
             for x in self.samples:
-                if (x["percentContamination"] < .2) and x["signal"] > sigThresh:
+                if (x["percentContamination"] < .2) and x["signal"] > sigThresh: #identify non-chimeric spectra with a TIC > 1e4
                     samplesToGo.append(x)
                 else:
                     samplesLeft.append(x)
@@ -1091,12 +1111,12 @@ class DecoID():
             outputData = {}
             t = Thread(target=self.recursiveRunQ, args=(q,data2Write,outputData))
             t.start()
-
+            #search spectra in questions
             self.runSamples(samplesToGo,q)
 
             t.join()
 
-
+            #filter results for known spectra
             unknownGroupIDs = []
             unknownThreshold = dpThresh
             unknownPPMThreshold = ppmThresh
@@ -1111,7 +1131,7 @@ class DecoID():
                     if samp["group"] == id:
                         unknownSamples.append(samp)
 
-
+            #add spectra to unknown library for future usage
             self.clusters = clusterSpectra(unknownSamples,self.peakData)
 
             print("Number of Predicted Unknown Compounds: ", len(self.clusters))
@@ -1120,13 +1140,14 @@ class DecoID():
 
     def searchSpectra(self,verbose,resPenalty = 100,percentPeaks=0.01,iso=False,threshold = 0.0):
         """
+        Search the spectra loaded into the DecoID object and write the output files
 
-        :param verbose:
-        :param resPenalty:
-        :param percentPeaks:
-        :param iso:
-        :param threshold:
-        :return:
+        :param verbose: str or Queue, "y" to write the progress to std out. Queue is used with the GUI to send updates dynamically/
+        :param resPenalty: float, lasso regression coefficient. Set to float("inf") for direct searching. Set to 0 for unregularized deconvolution. Reccomend 1 for DDA, 100 for DIA
+        :param percentPeaks: float, filtering parameter, exclude spectra that do not match this fraction of the database peaks
+        :param iso: bool, remove contamination from orphan isotopologues if True, False- do not.
+        :param threshold: float filtering parameter to remove hits with a spectral similarity less than this value
+        :return: None
         """
         try: self.samples
         except: print("datafile not loaded");return -1
@@ -1152,18 +1173,20 @@ class DecoID():
                 self.paramSuffix += "_" + str(int(x))
             success = False
             error = True
+            #check output file can be opened.
             while (not success):
-                #try:
+                try:
                     outfile = open(self.filename+ self.label + "_decoID" + ".csv", "w")
                     success = True
-                # except:
-                #     if error:
-                #         print("Error: please close " + self.filename + self.label + "_decoID.csv")
-                #         error = False
-                #         time.sleep(2)
-
+                except:
+                    if error:
+                        print("Error: please close " + self.filename + self.label + "_decoID.csv")
+                        error = False
+                        time.sleep(2)
+            #write header
             outfile.write(
                 "#scanID,isolation_center_m/z,rt,compound_m/z,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID\n")
+            #start Q
             t = Thread(target=self.runQ, args=(
             q,outfile,threshold,self.outputDataFinal,self.filename + self.label + ".DecoID",
             self.filename + self.label + "_scanInfo.csv", verbose))
@@ -1171,10 +1194,10 @@ class DecoID():
 
             t2 = Thread(target=self.sendCompleteSamples, args=(self.data2WriteFinal,q))
             t2.start()
-
+            #search spectra
             self.runSamples(self.samples,q)
 
-
+            #wait for completion
             t.join()
             t2.join()
 
@@ -1293,15 +1316,18 @@ class DecoID():
 
     def prepareForCluster(self,numberOfFiles):
         """
+        Split a large dataset read into DecoID for searching on separate machines. Helpful for large datafiles that want to be run on a compute cluster.
+        Will create dill files of DecoID objects with partial data lists, but the same parameters. These can be read with fromDill
 
-        :param numberOfFiles:
-        :return:
+        :param numberOfFiles: int, number of data files to split
+        :return: None
         """
         # if self.recursive:
         #     tempObject = DecoID.from_DecoID(self)
         #     tempObject.filename+="_unknowns_"
         #     tempObject.samples = []
         #     DecoID.writeObj(tempObject,tempObject.filename+".dill")
+        #get number of groups
         groups = list(set([x["group"] for x in self.samples]))
         numGroupsPerFile = int(len(groups)/numberOfFiles)
         self.data2WriteFinal = []
@@ -1309,26 +1335,27 @@ class DecoID():
         groupBegin = 0
         processes = []
         groupEnd = groupBegin + numGroupsPerFile
-        for num in range(numberOfFiles):
+        for num in range(numberOfFiles): #for each file
             tempObject = DecoID.from_DecoID(self)
             tempObject.filename += "_" + str(num) + "_"
-            if num != numberOfFiles - 1:
+            if num != numberOfFiles - 1: #specify groups
                 group = groups[groupBegin:groupEnd]
             else:
                 group = groups[groupBegin:]
             groupBegin = groupEnd
-            groupEnd = groupBegin + numGroupsPerFile
+            groupEnd = groupBegin + numGroupsPerFile #fix samples
             tempObject.samples = [samp for samp in tempObject.samples if samp["group"] in group]
-            DecoID.writeObj(tempObject,tempObject.filename+".dill")
+            DecoID.writeObj(tempObject,tempObject.filename+".dill") #write file
 
     @staticmethod
     def combineResults(filenames,newFilename,endings = ["_scanInfo.csv","_decoID.csv",".DecoID"]):
         """
+        Combine results from several files. Helpful to merge results from lots of files. Does only the .csv files for memory reasons.
 
-        :param filenames:
-        :param newFilename:
-        :param endings:
-        :return:
+        :param filenames: filenames to merge
+        :param newFilename: output file name
+        :param endings: which file endings to use.
+        :return: None
         """
         goodFiles = []
         for file in filenames:
