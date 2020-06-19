@@ -16,5 +16,5 @@ Other Helpful Functions
     :members: dotProductSpectra,readRawDataFile
 
 
-Documentation is on-going. All function will be added as more documentation is written.
+Documentation is on-going. All relevant functions will be added as more documentation is written.
 
