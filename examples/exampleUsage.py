@@ -1,6 +1,5 @@
 from DecoID.DecoID import DecoID
-libFile = "../databases/HMDB_experimental.db"
-libFile = "none"
+libFile = "../databases/mzCloud_reference.db"
 key = ""
 useAuto = True
 numCores = 10#int(sys.argv[2])

@@ -17,10 +17,10 @@ import pickle as pkl
 import dill
 import pandas as pd
 import uuid
-
+import grequests
 import numpy as np
 np.seterr(divide='ignore', invalid='ignore')
-
+import molmass
 import scipy.optimize as opt
 import sklearn.linear_model as linModel
 
@@ -270,7 +270,7 @@ def splitList(l, n):
     n = int(np.ceil(len(l)/float(n)))
     return list([l[i:i + n] for i in range(0, len(l), n)])
 
-def createM1SpectrumfromM0(spectra,massIncrease = 1.003,numFrags=5):
+def createM1SpectrumfromM0(spectra,formula,numFrags=5):
 
     if len(spectra) > 0:
         newSpectra = []
@@ -378,109 +378,6 @@ def mergeSpectrum(consensous,toAdd):
     new = {x:getVal(consensous,x)+getVal(toAdd,x) for x in keys}
     return new
 
-def findMax(mzs,ms1,rtStart,allRts):
-    getInt = lambda rt: np.sum([ms1[rt][x] for x in mzs if x in ms1[rt]])
-    rInd = allRts.index(rtStart)
-    grad = lambda ind,d: (getInt(allRts[ind+d]) - getInt(allRts[ind]))/(allRts[ind+d]-allRts[ind])#,(getInt(allRts[ind]) - getInt(allRts[ind-1]))/(allRts[ind]-allRts[ind-1])])
-    while rInd >= len(allRts) -1:
-        rInd -= 1
-    while rInd <= 1:
-        rInd += 1
-    pk = grad(rInd,1)
-    pkOld = pk
-    while(pk * pkOld > 0 and rInd-1 > 1 and rInd+1 < len(allRts)-1):
-        pkOld = pk
-        if pk > 0:
-            rInd += 1
-            try:
-                pk = grad(rInd,1)
-            except:
-                print("1",rInd,len(allRts))
-        else:
-            try:
-                rInd -= 1
-                pk = grad(rInd,-1)
-            except:
-                print("-1",rInd,len(allRts))
-        #pk = grad(rInd)
-        #plt.plot([allRts[rInd],allRts[rInd]],[0,1e7])
-
-    if pk * pkOld <= 0:
-        if pkOld > 0:
-            rInd -= 1
-        else:
-            rInd += 1
-
-
-    return getInt(allRts[rInd]),allRts[rInd]
-
-
-
-
-def extractFeatures(mzs,rts,ids,ms1,mError = 5):
-    allRt = list(ms1.keys())
-    allRt.sort()
-    chromatograms = {}
-    allMzList = list()
-    for s in ms1:
-        allMzList += [x for x in ms1[s] if ms1[s][x] > 0]
-    allMzList = np.array(list(set(allMzList)))
-
-    #print("found mzs")
-    for id,mz,rt in zip(ids,mzs,rts):
-        #plt.figure()
-        temp = [[r,abs(r-rt)] for r in allRt]
-        temp.sort(key=lambda x: x[1])
-        rtRep = temp[0][0]
-        mzOI = np.extract(np.abs((10**6)*(allMzList-mz))/mz < mError,allMzList)
-        #print("foundmzOI")
-        getInt = lambda rt: np.sum([ms1[rt][x] for x in mzOI if x in ms1[rt]])
-        maxInt,apex = findMax(mzOI,ms1,rtRep,allRt)
-        # maxInt = np.max(list(tempMs1.values()))
-        #print("XCR Done")
-        r = allRt.index(rtRep)
-        tempInts = getInt(allRt[r])
-        while(tempInts > .001*maxInt and r > 0 and r < len(allRt)-1):
-            r -= 1
-            tempInts = getInt(allRt[r])
-
-        rtMin = allRt[r]
-        #print("rt min done")
-        r = allRt.index(rtRep)
-        tempInts = getInt(allRt[r])
-        while(tempInts > .001*maxInt and r > 0 and r < len(allRt)-1):
-            r += 1
-            tempInts = getInt(allRt[r])
-
-
-        rtMax = allRt[r]
-        #print("rtMaxDone")
-        chromatograms[id] = [rtMin,rtMax]
-        rtMinBound = rtMin-.5*(rtMax-rtMin)
-        rtMaxBound = rtMax+.5*(rtMax-rtMin)
-        #tempMs1 = [[key,getInt(key)] for key in allRt if key > rtMinBound and key < rtMaxBound]
-
-
-        # plt.figure()
-        # plt.plot([x[0] for x in tempMs1],[x[1] for x in tempMs1])
-        # plt.plot([rt,rt],[0,maxInt])
-        # plt.plot([rtMin,rtMin],[0,maxInt])
-        # plt.plot([rtMax,rtMax],[0,maxInt])
-        # plt.plot([apex,apex],[0,maxInt])
-        # plt.xlim([rtMinBound,rtMaxBound])
-
-        # plt.figure()
-        # plt.plot([allRt[x] for x in range(len(allRt)-1) if allRt[x] > rtMinBound and allRt[x] < rtMaxBound],
-        #          [(tempMs1[allRt[x+1]] - tempMs1[allRt[x]])/(allRt[x+1] - allRt[x]) for x in range(len(allRt)) if allRt[x] > rtMinBound and allRt[x] < rtMaxBound])
-        # plt.plot([rt, rt], [0, maxInt])
-        # plt.plot([rtMin, rtMin], [0, maxInt])
-        # plt.plot([rtMax, rtMax], [0, maxInt])
-        # plt.xlim([rtMinBound, rtMaxBound])
-
-        #print("plots done")
-    #plt.show()
-    return chromatograms
-
 
 def getMatricesForGroup(trees,spectra,possCompounds,possIsotopes,isotope,res,clusters):
 
@@ -559,17 +456,6 @@ def getMatricesForGroup(trees,spectra,possCompounds,possIsotopes,isotope,res,clu
 
     return metIDs, spectraTrees, spectraIDs, matrix, masses, metNames, indicesAll, reduceSpec
 
-def pullMostSimilarSpectraIsotopologues(trees,spectra):
-    returnDict = {}
-    for tree,ms2Scans in trees.items():
-        if len(ms2Scans) > 0:
-            generatedIsotopologus = {id:createM1SpectrumfromM0(ms2) for id,ms2 in ms2Scans.items()}
-            temp = [[id,ms2[0],dotProductSpectra(spectra,ms2[1])] for id,ms2 in generatedIsotopologus.items()]
-            temp.sort(key=lambda x:x[2],reverse=True)
-            returnDict[tree] = temp[0][:2]
-    return returnDict
-
-
 def pullMostSimilarSpectra(trees,spectra):
     returnDict = {}
     for tree,ms2Scans in trees.items():
@@ -589,26 +475,32 @@ def getVal(dict,key):
 
 
 # determine if m/z is within ppmThresh of an m/z in fragments
-def inScan(fragments,candidate_mz,ppmThresh=10):
-    if type(fragments) != type(str()):
-        try:
-            if any(abs(candidate_mz-x)/candidate_mz/(1e-6) < ppmThresh for x in fragments):
+def inScan(fragments,rt,candidate_mz,candidate_rt,ppmThresh=10,rt_thresh = .5):
+    if candidate_rt == -1 or (abs(rt-candidate_rt) < rt_thresh):
+        if type(fragments) != type(str()):
+            try:
+                if any(abs(candidate_mz-x)/candidate_mz/(1e-6) < ppmThresh for x in fragments):
+                    return True
+                else:
+                    return False
+            except:
+                print(candidate_mz,fragments)
+        else:
+            return True
+    else:
+        return False
+
+def inScanIso(fragments,rt,candidate_mz,candidate_rt,ppmThresh=10,rt_thresh = .5):
+    if candidate_rt == -1 or (abs(rt-candidate_rt) < rt_thresh):
+        if type(fragments) != type(str()):
+            if any(abs(candidate_mz - x) / candidate_mz / (1e-6) < ppmThresh for x in fragments) and any(abs(candidate_mz-1.003 - x)/(candidate_mz-1.003)/(1e-6) < ppmThresh for x in fragments):
                 return True
             else:
                 return False
-        except:
-            print(candidate_mz,fragments)
-    else:
-        return True
-
-def inScanIso(fragments,candidate_mz,ppmThresh=10):
-    if type(fragments) != type(str()):
-        if any(abs(candidate_mz - x) / candidate_mz / (1e-6) < ppmThresh for x in fragments) and any(abs(candidate_mz-1.003 - x)/(candidate_mz-1.003)/(1e-6) < ppmThresh for x in fragments):
-            return True
         else:
-            return False
+            return True
     else:
-        return True
+        return False
 
 
 #https://stackoverflow.com/questions/12141150/from-list-of-integers-get-number-closest-to-a-given-value
@@ -774,37 +666,17 @@ class DecoID():
         self.libFile = libFile
         self.useDBLock = False
         #read tsv library file
-        if ".tsv" in libFile:
-            try:
-                f = open(libFile,"r",encoding = "utf-8")
-                data = [x.replace(",","_").rstrip().split("\t") for x in f.readlines()]
-                header = data[0]
-                data = [{k:replaceAllCommas(val) for k,val in zip(header,x)} for x in data[1:]]
-                for x in data:
-                    x["m/z"] = float(x["m/z"])
-                    x["spectrum"] = createDictFromString(x["spectrum"],resolution)
 
-                posData = {x["id"]:x for x in data if "ositive" in x["mode"]}
-                negData = {x["id"]:x for x in data if "egative" in x["mode"]}
-                self.library = {"Positive":posData,"Negative":negData}
-            except:
-                print("bad library file: ", libFile)
-                return -1
-            self.lib = customDBpy
-            self.cachedReq = "none"
-            self.ms_ms_library = "custom"
-            self.useAuto = useAuto
-            pkl.dump(self.library, open(libFile.replace(".tsv", ".db"),"wb"))
-            print("Library loaded successfully: " + str(
-            len(self.library["Positive"]) + len(self.library["Negative"])) + " spectra found")
         #for msp library files
-        elif ".msp" in libFile:
+        if ".msp" in libFile:
             try:
                 mz = -1
                 id = -1
                 cpdid = -1
                 polarity = -1
                 exactMass = -1
+                rt = -1
+                formula = -1
                 spectrum = {}
                 f = open(libFile,"r",encoding="utf-8")
                 self.library = {"Positive":{},"Negative":{}}
@@ -816,7 +688,7 @@ class DecoID():
                     if "Name:" in line:
                         if not first:
                             if exactMass != -1 or mz != -1:
-                                if polarity != -1:
+                                if polarity != -1 and formula != -1:
                                     if mz == -1:
                                         if polarity == "Negative":
                                             mz = exactMass - 1.0073
@@ -825,7 +697,7 @@ class DecoID():
                                     if cpdid == -1:
                                         cpdid = name
                                     if id != -1 and len(spectrum) > 0:
-                                        self.library[polarity][id] = {"id":id,"cpdID":cpdid,"name":replaceAllCommas(name),"mode":polarity,"spectrum":spectrum,"m/z":np.round(mz,4)}
+                                        self.library[polarity][id] = {"id":id,"cpdID":cpdid,"rt":rt,"formula":formula,"name":replaceAllCommas(name),"mode":polarity,"spectrum":spectrum,"m/z":np.round(mz,4)}
                                         good = True
 
 
@@ -836,6 +708,8 @@ class DecoID():
                         id = -1
                         cpdid = -1
                         polarity = -1
+                        rt = -1
+                        formula = -1
                         spectrum = {}
                         looking = False
                         good = False
@@ -851,6 +725,10 @@ class DecoID():
                             polarity = "Negative"
                     if "ExactMass:" in line:
                         exactMass = float(line.split(": ")[1])
+                    if "RetentionTime:" in line:
+                        rt = float(line.split(": ")[1])
+                    if "Formula:" in line:
+                        formula = line.split(": ")[1]
                     if "PrecursorMZ: " in line:
                         mz = float(line.split(": ")[1])
                     if "Ion_mode: " in line:
@@ -917,7 +795,7 @@ class DecoID():
         return obj
 
 
-    def readData(self,filename,resolution,peaks,DDA,massAcc,offset=.65,peakDefinitions = "",tic_cutoff=0):
+    def readData(self,filename,resolution,peaks,DDA,massAcc,offset=.65,peakDefinitions = "",tic_cutoff=0,frag_cutoff = 0):
         """
         Read in raw MS data into DecoID object.
 
@@ -929,6 +807,7 @@ class DecoID():
         :param offset: float, isolation window width measured from center of window to outer edge.
         :param peakDefinitions: str, path to peak definition file
         :param tic_cutoff: float, TIC cutoff for MS/MS spectra. Spectra below this value will be ignored
+        :param frag_cutoff: float, Intensity cutoff for fragments to be included. Fragments in spectra below this intensity will be ignored.
         :return: None
         """
         #read in data
@@ -1071,7 +950,7 @@ class DecoID():
             else:
                 time.sleep(1)
 
-    def identifyUnknowns(self,resPenalty=100,percentPeaks=0.01,iso=False,ppmThresh = 10,dpThresh = 20):
+    def identifyUnknowns(self,resPenalty=100,percentPeaks=0.01,iso=False,ppmThresh = 10,dpThresh = 20,rtTol=.5):
         """
         Generate the on-the-fly unknown library by searching all spectra first and identifying those that are unknown.
         These spectra can then be used to deconvolve other spectra. Only applicable to DDA with MS1 collected.
@@ -1087,7 +966,7 @@ class DecoID():
         except: print("datafile not loaded");return -1
         self.iso = iso
         self.percentPeaks = percentPeaks
-
+        self.rtTol = rtTol
         self.resPenalty = resPenalty
 
         #check datatype
@@ -1102,7 +981,7 @@ class DecoID():
             samplesLeft = []
             sigThresh = 4
             for x in self.samples:
-                if (x["percentContamination"] < .2) and x["signal"] > sigThresh: #identify non-chimeric spectra with a TIC > 1e4
+                if (x["percentContamination"] < .1) and x["signal"] > sigThresh: #identify non-chimeric spectra with a TIC > 1e4
                     samplesToGo.append(x)
                 else:
                     samplesLeft.append(x)
@@ -1138,7 +1017,7 @@ class DecoID():
 
 
 
-    def searchSpectra(self,verbose,resPenalty = 100,percentPeaks=0.01,iso=False,threshold = 0.0):
+    def searchSpectra(self,verbose,resPenalty = 100,percentPeaks=0.01,iso=False,threshold = 0.0,rtTol=.5):
         """
         Search the spectra loaded into the DecoID object and write the output files
 
@@ -1155,6 +1034,7 @@ class DecoID():
 
         self.iso = iso
         self.percentPeaks = percentPeaks
+        self.rtTol = rtTol
 
         self.resPenalty = resPenalty
         if len(self.ms1) < 1:
@@ -1438,7 +1318,7 @@ class DecoID():
                      any(key[1] < samp["rt"] and key[2] > samp["rt"] for samp in samples)}
             p = Process(target=DecoID.processGroup,
                         args=(
-                            samples,group,trees, spectra, possCompounds, possIsotopes, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound))
+                            samples,group,trees, spectra, possCompounds, possIsotopes, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol))
             #t = Thread(target=startProc, args=(p, numProcesses, lock))
             while not checkRoom(numProcesses, lock):
                 time.sleep(1)
@@ -1481,10 +1361,10 @@ class DecoID():
             t.join()
 
     @staticmethod
-    def processGroup(samples,group,trees, spectra, possCompounds, possIsotopes, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound):
+    def processGroup(samples,group,trees, spectra, possCompounds, possIsotopes, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol):
 
         [metIDs, spectraTrees, spectraIDs, matrix, masses, metNames, indicesAll,
-         reduceSpec] = getMatricesForGroup(trees, spectra, possCompounds, possIsotopes, iso,
+         reduceSpec,rts] = getMatricesForGroup(trees, spectra, possCompounds, possIsotopes, iso,
                                            # make get matrices for group independent of library source
                                            resolution, toAdd)
         isoIndices = [x for x in range(len(metIDs)) if type(metIDs[x]) == type(tuple())]
@@ -1494,7 +1374,7 @@ class DecoID():
         reduceSpec2Go = list(reduceSpec)
 
         for sample, spectrum in zip(samples2Go, reduceSpec2Go):
-            results.append(DecoID.processSample(sample, spectrum, masses, matrix, massAcc, peaks,resPenalty,isoIndices))
+            results.append(DecoID.processSample(sample, spectrum, masses, matrix, massAcc, peaks,resPenalty,isoIndices,rts,rtTol))
 
         if DDA:
             combinedSpectrum = np.sum(reduceSpec, axis=0)
@@ -1577,12 +1457,12 @@ class DecoID():
             #no peaks => no results
 
     @staticmethod
-    def processSample(sample,spectrum,masses,matrix,massAcc,peaks,resPenalty,isoIndices):
+    def processSample(sample,spectrum,masses,matrix,massAcc,peaks,resPenalty,isoIndices,rts,rtTol):
 
         centerMz = sample["center m/z"]
         lowerBound = sample["lower m/z"]  # lowest m/z in isolation window
         upperBound = sample["higher m/z"]  # highest
-
+        rt = sample["rt"]
         def checkScan(mass,index):
             if index in isoIndices:
                 return inScanIso(sample["fragments"],mass,massAcc)
@@ -1590,7 +1470,7 @@ class DecoID():
                 return inScan(sample["fragments"],mass,massAcc)
 
         if len(matrix) > 0:
-            goodIndices = [x for x in range(len(masses)) if masses[x] < upperBound and masses[x] > lowerBound and ((not peaks) or checkScan(masses[x],x))]
+            goodIndices = [x for x in range(len(masses)) if masses[x] < upperBound and masses[x] > lowerBound and ((not peaks) or checkScan(masses[x],x)) and (np.abs(rts[x]-rt) < rtTol or rts[x] == -1)]
             if len(goodIndices) > 0:
                 resTemp, s2n = solveSystem([matrix[x] for x in goodIndices], spectrum,resPenalty)  # deconvolution
                 res = [0.0 for _ in masses]
@@ -1640,7 +1520,7 @@ class DecoID():
                     outfile.close()
 
 
-import grequests
+import requests
 import json
 if getattr(sys, 'frozen', False):
     application_path = sys._MEIPASS
@@ -1673,22 +1553,20 @@ class customDBpy():
         possIsotopes = set()
 
         # get compounds in isolation window
-        possCompoundsTemp = {
-            (library[mode][x]["cpdID"], library[mode][x]["cpdID"], library[mode][x]["name"], library[mode][x]["id"], x):
-                library[mode][x]["m/z"] for x in
-            library[mode] if library[mode][x]["m/z"] >= lowerBound and library[mode][x]["m/z"] <= upperBound}
-        possCompoundsTemp = [(str(x[0]), x[1], possCompoundsTemp[x], x[2], x[3], x[4]) for x in possCompoundsTemp]
+        possCompounds = {
+            (library[mode][x]["cpdID"], library[mode][x]["cpdID"],
+             library[mode][x]["m/z"],library[mode][x]["name"],
+             library[mode][x]["rt"],library[mode][x]["formula"],
+             library[mode][x]["id"]):library[mode][x]["spectrum"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound and library[mode][x]["m/z"] <= upperBound}
 
-        possCompounds = possCompounds.union({tuple(x) for x in possCompoundsTemp})
 
         # get isotopes if necessary
         if isotope:
-            possIsotopesTemp = {(library[mode][x]["cpdID"], library[mode][x]["cpdID"], library[mode][x]["name"],
-                                 library[mode][x]["id"], x): library[mode][x]["m/z"] for x in
-                                library[mode] if library[mode][x]["m/z"] >= lowerBound - 1.00335 and library[mode][x][
-                                    "m/z"] <= lowerBound}
-            possIsotopesTemp = [(str(x[0]), x[1], possIsotopesTemp[x], x[2], x[3], x[4]) for x in possIsotopesTemp]
-            possIsotopes = possIsotopes.union({tuple(x) for x in possIsotopesTemp})
+            possIsotopes = {(library[mode][x]["cpdID"], library[mode][x]["cpdID"],
+                             library[mode][x]["m/z"] + 1.003, library[mode][x]["name"] + " (M+1)",
+                             library[mode][x]["rt"],library[mode][x]["formula"],
+                             library[mode][x]["id"]):library[mode][x]["spectrum"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound - 1.00335 and library[mode][x]["m/z"] <= lowerBound}
+
 
         trees = {x[:-1]: library[mode][x[-1]]["spectrum"] for x in possIsotopes.union(possCompounds)}
         uniqueCPDs = list(set([tuple(x[:-1]) for x in trees]))
@@ -1717,17 +1595,11 @@ class mzCloudPy():
         keys = Keys(key)
         # make list of isolation window range
         centerMz = [lowerBound, upperBound]
-        centerMz[0] = int(np.floor(centerMz[0]))
-        centerMz[1] = int(np.ceil(centerMz[1]))
-        possCompoundsTrueAll = set()
-        possIsotopesTrueAll = set()
         possCompounds = set()
         possIsotopes = set()
         for lib in library:
             # get compounds in isolation window
-            possCompoundsTemp = {tuple(x[:2]) + (x[3],): x[2] for x in
-                                 flatten([MZCOMPOUNDTREELINK[lib][mode][x] for x in
-                                          range(centerMz[0] - 1, centerMz[1] + 1)])}
+
             possCompoundsTemp = [(lib[0] + str(x[0]), x[1], possCompoundsTemp[x], x[2]) for x in possCompoundsTemp if
                                  possCompoundsTemp[x] >= lowerBound and possCompoundsTemp[x] <= upperBound]
 
@@ -1743,7 +1615,7 @@ class mzCloudPy():
                 possIsotopes = possIsotopes.union({tuple(x) for x in
                                                    possIsotopesTemp})  # if x[2] >= centerMzOrig - isolationWidth - 1 and x[2] <= centerMzOrig - isolationWidth}
 
-        trees = mzCloudPy.getTreesAsync(possIsotopes.union(possCompounds),keys)
+        trees = mzCloudPy.getTrees(possIsotopes.union(possCompounds), keys)
 
         return trees, possCompounds, possIsotopes
 
@@ -1751,59 +1623,32 @@ class mzCloudPy():
     take spectra from m/z cloud after being read in by json and convert to dictionary
     """
     @staticmethod
-    def convertSpectra2Vector(spectra, maxMass, resolution):
-        mzs = {np.round(x["MZ"], resolution): x["Abundance"] for x in spectra["Peaks"]}
+    def convertSpectra2Vector(spectra):
+        mzs = {x["MZ"]:0 for x in spectra["Peaks"]}
+        for x in spectra["Peaks"]:
+            mzs[x["MZ"]] += x["Abundance"]
         return mzs
+
     @staticmethod
-    def getTreesAsync(trees,keys, calibration="recalibrated", maxRetries=3, cache="none", maxMass=MAXMASS, resolution=2):
-        libraryDict = {"a": "autoprocessing", "r": "reference"}
-        requestTuple = []
-        keyList = []
-        alreadyCached = {}
-        toCache = []
+    def getTrees(trees, keys, calibration="recalibrated",library="reference"):
+        output = {}
         for tree in trees:
             url = keys.SPECTRAURL.replace("TREENUMBER", str(tree[1]))
-            library = libraryDict[tree[0][0]]
             url = url.replace("LIBRARY", library)
             querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
             payload = ""
-            if type(cache) != type("") and (library, tree) in cache:
-                alreadyCached[tree] = cache[(library, tree)]
-            else:
-                toCache.append([library, tree])
-                keyList.append(tree)
-                requestTuple.append(
-                    grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=timeout))
-        requestTuple = tuple(requestTuple)
-        responses = grequests.map(requestTuple, size=CONCURRENTREQUESTMAX)
-        errors = [key for key in range(len(keyList)) if
-                  type(responses[key]) == type(None) or "An error has occurred" in responses[
-                      key].text or "Service Unavailable" in responses[key].text]
-        numTries = 1
-        while (len(errors) > 0) and maxRetries > numTries:
-            requestTuple = []
-            # print("error", len(errors),len(trees))
-            for tree in errors:
-                url = keys.SPECTRAURL.replace("TREENUMBER", str(keyList[tree][1]))
-                url = url.replace("LIBRARY", library)
-                querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
-                payload = ""
-                requestTuple.append(
-                    grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=timeout))
-            requestTuple = tuple(requestTuple)
-            responsesNew = grequests.map(requestTuple, size=CONCURRENTREQUESTMAX)
-            for response, tree in zip(responsesNew, errors):
-                responses[tree] = response
-            errors = [key for key in range(len(keyList)) if
-                      type(responses[key]) == type(None) or "An error has occurred" in responses[
-                          key].text or "Service Unavailable" in responses[key].text]
-            numTries += 1
-        if numTries >= maxRetries:
-            print("Number of retries exceeded to contact m/zCloud. Check network")
-        responses = [responses[x] for x in range(len(responses)) if x not in errors]
-        keyList = [keyList[x] for x in range(len(keyList)) if x not in errors]
-        output = {key: mzCloudPy.getAllSpectraInTree(mzCloudPy.reformatSpectraDictList(json.loads(val.text)), maxMass, resolution) for
-                  key, val in zip(keyList, responses)}
+            response = 1
+            while (response == 1):
+                try:
+                    response = requests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=30)
+                    if type(response) == type(
+                            None) or "An error has occurred" in response.text or "Service Unavailable" in response.text or "unavailable" in response.text:
+                        response = 1
+                    else:
+                        output[tree] = mzCloudPy.getAllSpectraInTree(
+                            mzCloudPy.reformatSpectraDictList(json.loads(response.text)))
+                except:
+                   pass
 
         return output
     @staticmethod
@@ -1811,10 +1656,11 @@ class mzCloudPy():
         dat = {x["Id"]: {key: val for key, val in x.items() if key != "Id"} for x in dictList}
         return dat
     @staticmethod
-    def getAllSpectraInTree(dat, maxMass, resolution):
-        return {id: mzCloudPy.convertSpectra2Vector(dat[id], maxMass, resolution) for id in dat}
+    def getAllSpectraInTree(dat):
+        return {id: mzCloudPy.convertSpectra2Vector(dat[id]) for id in dat}
+
     @staticmethod
-    def getCompoundList(page, pageSize=100, library="reference"):
+    def getCompoundList(page,keys, pageSize=100, library="reference"):
         url = keys.COMPOUNDURL
         url = url.replace("LIBRARY", library)
         querystring = {"page": str(page), "pageSize": str(pageSize), "newer": "2000-09-03"}
@@ -1823,8 +1669,7 @@ class mzCloudPy():
         response = 1
         while (response == 1):
             try:
-                response = (grequests.get(url, data=payload, headers=keys.HEADERSCOMP, params=querystring, timeout=timeout),)
-                response = grequests.map(response)[0]
+                response = requests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=timeout)
                 if type(response) == type(
                         None) or "An error has occurred" in response.text or "Service Unavailable" in response.text:
                     response = 1
@@ -1833,82 +1678,46 @@ class mzCloudPy():
             except:
                 pass
         return dat
-    @staticmethod
-    def getListofSpectrainTree(trees,keys, calibration="recalibrated", library="reference"):
-        response = 1
-        requestTuple = []
-        treeOrder = list(trees)
-        for tree in trees:
-            url = keys.SPECTRAURL.replace("TREENUMBER", str(tree[0]))
-            url = url.replace("LIBRARY", library)
-            querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
-            payload = ""
-            requestTuple.append(grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=40))
-        requestTuple = tuple(requestTuple)
-        responses = grequests.map(requestTuple)
 
-        errors = [key for key in range(len(responses)) if
-                  type(responses[key]) == type(None) or "An error has occurred" in responses[key].text]
-        while (len(errors) > 0):
-            requestTuple = []
-            for tree in [treeOrder[x] for x in errors]:
-                url = keys.SPECTRAURL.replace("TREENUMBER", str(tree[0]))
-                url = url.replace("LIBRARY", library)
-                querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
-                payload = ""
-                requestTuple.append(
-                    grequests.get(url, data=payload, headers=keys.HEADER, params=querystring, timeout=40))
-            requestTuple = tuple(requestTuple)
-            responsesNew = grequests.map(requestTuple)
-            for error, res in zip(errors, responsesNew):
-                responses[error] = res
-
-            errors = [key for key in range(len(responses)) if
-                      type(responses[key]) == type(None) or "An error has occurred" in responses[
-                          key].text or "Service Unavailable" in responses[key].text or "unavailable" in responses[
-                          key].text]
-
-        output = {tree: mzCloudPy.reformatSpectraDictList(json.loads(response.text)) for response, tree in
-                  zip(responses, treeOrder)}
-        return output
     @staticmethod
     def generateCompoundID2SpectralIDIndexedByM_ZStrict(numPerPage=100, key="none",library="reference"):
         # get number of items
         keys = Keys(key)
-        totalCompounds = json.loads(grequests.map((grequests.get(keys.COMPOUNDURL.replace("LIBRARY", library), data="",
+        totalCompounds = json.loads(requests.get(keys.COMPOUNDURL.replace("LIBRARY", library), data="",
                                                                  headers=keys.HEADER, params={"page": str(1),
                                                                                               "pageSize": "5",
-                                                                                              "newer": "2000-09-03"}),))[
-                                        0].text)["Total"]
+                                                                                              "newer": "2000-09-03"}).text)["Total"]
+
+        print(totalCompounds)
         numPages = int(np.ceil(float(totalCompounds) / numPerPage))
-        pos = [[] for _ in range(5000)]
-        neg = [[] for _ in range(5000)]
-        linkage = {"Positive": pos, "Negative": neg}
+        linkage = {"Positive": [], "Negative": []}
         for page in range(1, numPages + 1):
-            compounds = mzCloudPy.getCompoundList(page, numPerPage, library=library)
+            compounds = mzCloudPy.getCompoundList(page, keys,numPerPage, library=library)
             # print(compounds)
             treeDict = {}
             for comp in compounds:
-                treeDict.update({(key, comp, compounds[comp]["SearchCompoundName"]): val for key, val in
-                                 mzCloudPy.reformatSpectraDictList(compounds[comp]["SpectralTrees"]).items()})
-
-            allSpectra = mzCloudPy.getListofSpectrainTree(list(treeDict.keys()),keys)
-
-            for tree in treeDict:
-                posValsRounded = []
-                posValsTrue = []
-                spectras = allSpectra[tree]
-                for spectra in spectras:
-                    rounded = int(np.floor(spectras[spectra]["IsolationWidth"]["XPos"]))
-                    posValsRounded.append(rounded)
-                    posValsTrue.append(np.round(spectras[spectra]["IsolationWidth"]["XPos"], 7))
                 try:
-                    [linkage[treeDict[tree]["Polarity"]][x].append((tree[1], tree[0], y, tree[2])) for x, y in
-                     zip(posValsRounded, posValsTrue)]
+                    formula = compounds[comp]["InChI"].split("/")[1]
+                    tmp = molmass.Formula(formula)
+                    mz = tmp.isotope.mass
+                    treeDict.update({(key, comp, compounds[comp]["SearchCompoundName"],formula,-1,mz): val for key, val in
+                                 mzCloudPy.reformatSpectraDictList(compounds[comp]["SpectralTrees"]).items()})
                 except:
-                    print(tree, posValsRounded)
+                    pass
+            for tree in treeDict:
+                try:
+                    polarity = treeDict[tree]["Polarity"]
+                    if polarity == "Positive":
+                        mz = tree[-1] + 1.0073
+                    else:
+                        mz = tree[-1] - 1.0073
+                    tree = tuple(list(tree[:-1]) + [mz])
+                    linkage[polarity].append(tree)
+                except:
+                    pass
+
             print(float(page) * numPerPage / totalCompounds)
-        pkl.dump(linkage, open("mzCloudCompound2TreeLinkage" + library + ".pkl", "wb"), pkl.HIGHEST_PROTOCOL)
+        pkl.dump(linkage, open("../src/DecoID/mzCloudCompound2TreeLinkage" + library + ".pkl", "wb"), pkl.HIGHEST_PROTOCOL)
 
 
 
