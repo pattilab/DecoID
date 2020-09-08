@@ -19,7 +19,7 @@ LARGE_FONT = ("Verdana", 12)
 RESOLUTIONS = [-1,0,1,2]
 METHODS = ["dot","eV","NCE"]
 PPMFILTER = [False,True]
-RT = [True,False]
+RT = [False,True]
 MZCLOUDSELECTION = ["reference","autoprocessing","none","none","none"]
 
 if getattr(sys, 'frozen', False):
@@ -262,7 +262,7 @@ def plotSpectra(minMass,maxMass,res,spectras,cs=["blue","red"],labels=["Original
         specificPlot.set_ylabel("Relative Intensity")
         specificPlot.legend()
         if len(spectras) == 1:
-            specificPlot.ylim((0,1))
+            specificPlot.set_ylim((0,1))
 
 
 
@@ -297,33 +297,18 @@ def closeAndRestart(pane,command):
         pass
 
 
-def visualizeResultsStart(self,filename,scoreThresh,ppmThresh,usePPM,scanNumber,library,recursive,iso,peaks,DDA):
-    useAuto = 0
-    useIso = 0
-    usePeaks = 0
-    if not PPMFILTER[library.state()]:
-        useAuto = 1
-    useRec = 0
-    if not PPMFILTER[recursive.state()]:
-        useRec = 1
-    if not PPMFILTER[iso.state()]:
-        useIso = 1
-    if not PPMFILTER[peaks.state()]:
-        usePeaks = 1
-    DDA = not DDA.state()
-    prefix = ""
-    for x in [useAuto, useRec, useIso, usePeaks]:
-        prefix += "_" + str(x)
+def visualizeResultsStart(self,filename,scoreThresh,ppmThresh,usePPM,scanNumber,recursive,iso,peaks,DDA):
+
     top = Toplevel()
     if PPMFILTER[usePPM]:
         ppmThresh = np.inf
     Label(top, text="Clustering...", font=LARGE_FONT).pack()
 
     thr = threading.Thread(target=visualizeResults,
-                           args=(self,filename,top,scoreThresh,ppmThresh,scanNumber,prefix,DDA))
+                           args=(self,filename,top,scoreThresh,ppmThresh,scanNumber,DDA))
     thr.start()
 
-def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumber, prefix, DDA):
+def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumber, DDA):
         name = filename.get()
         ending = name.split(".")[-1]
         name = name.replace("." + ending,".DecoID")
@@ -407,7 +392,7 @@ def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumb
         Label(top,text="Choose Feature").pack()
         menu.pack()
 
-        displayButton = ttk.Button(top, text="Display Results",command = lambda :displayHitsForCluster(clusteredSamples[featureLabelDict[selection.get()]],results,selection.get(),filename.get(),ppmThresh,scoreThresh,prefix,DDA,ms1,isoBounds[featureLabelDict[selection.get()]]))
+        displayButton = ttk.Button(top, text="Display Results",command = lambda :displayHitsForCluster(clusteredSamples[featureLabelDict[selection.get()]],results,selection.get(),filename.get(),ppmThresh,scoreThresh,DDA,ms1,isoBounds[featureLabelDict[selection.get()]]))
         displayButton.pack()
 
 
@@ -416,7 +401,7 @@ def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumb
     #     Label(top, text="Datafile does not exist for selected file, please run the search first", font=LARGE_FONT).pack()
 
 
-def displayHitsForCluster(cluster,results,feature,filename,ppmThresh,scoreThresh,prefix,DDA,ms1,isoBounds):
+def displayHitsForCluster(cluster,results,feature,filename,ppmThresh,scoreThresh,DDA,ms1,isoBounds):
 
     relevant = {key:val for key,val in results.items() if key == cluster["group"]}
     newDict = {}
@@ -439,20 +424,20 @@ def displayHitsForCluster(cluster,results,feature,filename,ppmThresh,scoreThresh
         #     tempMz = relevant[id]["center m/z"]
         for hit in relevant[id]["Hits"]:
             tempMz = relevant[id]["center m/z"]
-            if (abs(hit[3] - tempMz)/tempMz) * 10 **6 < ppmThresh and relevant[id]["Hits"][hit][0] > scoreThresh:
+            if (abs(float(hit[2]) - float(tempMz))/float(tempMz)) * 10 **6 < ppmThresh and relevant[id]["Hits"][hit][0] > scoreThresh:
                 newDict[(id,relevant[id]["rt"],tempMz,tuple(relevant[id]["index"]))+hit] = [relevant[id]["decoSpec"],ms1Spec] + relevant[id]["Hits"][hit]
     order = list(newDict.keys())
     order.sort(key=lambda x:newDict[x][2],reverse=True)
     result = [list(x) + newDict[x] for x in order]
     if len(result) > 0:
-        displayHit(result.__iter__(),feature + " ("+str(len(result)) + " Hits)",cluster,filename,prefix,ms1Deco,isoBounds)
+        displayHit(result.__iter__(),feature + " ("+str(len(result)) + " Hits)",cluster,filename,ms1Deco,isoBounds)
     else:
         top = Toplevel()
         Label(top, text=feature, font=LARGE_FONT).pack()
         Label(top,text="has no matches above the specified thresholds").pack()
 
 
-def displayHit(result,feature,cluster,filename,prefix,ms1Deco,isoBounds):
+def displayHit(result,feature,cluster,filename,ms1Deco,isoBounds):
     sample = next(result)
     resolution = 2
     top = Toplevel()
@@ -472,11 +457,11 @@ def displayHit(result,feature,cluster,filename,prefix,ms1Deco,isoBounds):
     a3 = f.add_subplot(grid[1,0])
 
     indices = sample[3]
-    decoSpec = sample[9]
+    decoSpec = sample[11]
     spec2Display = []
-    ms1 = sample[10]
-    for spec in sample[-4:-2]:
-        #print(spec)
+    ms1 = sample[12]
+
+    for spec in sample[14:16]:
         tempSpec = np.zeros(MAXMASS*10**resolution)
         for i,m in zip(indices,spec):
             tempSpec[i] = m
@@ -486,8 +471,8 @@ def displayHit(result,feature,cluster,filename,prefix,ms1Deco,isoBounds):
         tempSpec[i] = m
     decoSpec = tempSpec.tolist()
     plotSpectra(0, maxMass=MAXMASS, res=0.01, spectras=spec2Display, specificPlot=a1,
-                title="DP = " + str(np.round(sample[-5],2)) + "   PPM Error = " + str(np.round(((10**6)*(sample[2] - sample[7])/sample[2]),2)),
-                labels=["Component: " + sample[-2],sample[4]])
+                title="DP = " + str(np.round(sample[-6],2)) + "   PPM Error = " + str(np.round(((10**6)*(float(sample[2]) - float(sample[6]))/float(sample[2])),2)),
+                labels=["Component: " + sample[-3],sample[7]])
 
     spec = np.zeros(MAXMASS*10**resolution).tolist()
     for key,val in cluster["spectrum"].items():
@@ -512,15 +497,15 @@ def displayHit(result,feature,cluster,filename,prefix,ms1Deco,isoBounds):
 
 
     acceptMatchButton = ttk.Button(top, text="Accept Match",
-                                 command=lambda: appendAnnotation(sample,cluster,filename,prefix))
+                                 command=lambda: appendAnnotation(sample,cluster,filename))
     acceptMatchButton.pack()
     nextFigureButton = ttk.Button(top, text="Next",
-                                 command=lambda: closeAndRestart(top,lambda:displayHit(result,feature,cluster,filename,prefix,ms1Deco,isoBounds)))
+                                 command=lambda: closeAndRestart(top,lambda:displayHit(result,feature,cluster,filename,ms1Deco,isoBounds)))
     nextFigureButton.pack()
     top.resizable = True
 
 
-def appendAnnotation(sample,cluster,filename,prefix):
+def appendAnnotation(sample,cluster,filename):
     if ".raw" in filename:
         filename = filename.replace(".raw","_Annotation.csv")
     elif ".mzML" in filename:
@@ -539,22 +524,8 @@ def appendAnnotation(sample,cluster,filename,prefix):
     file.write("\n")
     file.close()
 
-def writeResults(filenameOrig,scoreThresh,ppmThresh,usePPM,scanNumber,library,recursive,iso,peaks):
-    useAuto = 0
-    useIso = 0
-    usePeaks = 0
-    if not PPMFILTER[library.state()]:
-        useAuto = 1
-    useRec = 0
-    if not PPMFILTER[recursive.state()]:
-        useRec = 1
-    if not PPMFILTER[iso.state()]:
-        useIso = 1
-    if not PPMFILTER[peaks.state()]:
-        usePeaks = 1
-    prefix = ""
-    for x in [useAuto, useRec, useIso, usePeaks]:
-        prefix += "_" + str(x)
+def writeResults(filenameOrig,scoreThresh,ppmThresh,usePPM,scanNumber,recursive,iso,peaks):
+
     try:
         if PPMFILTER[usePPM]:
             ppmThresh = np.inf
@@ -723,7 +694,7 @@ class StartPage(Frame):
         libraryFile.set("No File Selected")
         Label(LeftTop,textvariable=libraryFile).grid(row=2,column=3,pady=10)
         browseLibFileButton = ttk.Button(LeftTop, text="Select File",
-                                      command=lambda: browseForFile(libraryFile,types=[("tsv","*.tsv"),("database",".db"),("msp",".msp")]))
+                                      command=lambda: browseForFile(libraryFile,types=[("database",".db"),("msp",".msp")]))
         browseLibFileButton.grid(row=3,column=3,pady=10)
 
 
@@ -835,9 +806,9 @@ class StartPage(Frame):
 
 
         visualizeResultsButton = ttk.Button(RightTop, text="Display Search Results",
-                                            command=lambda: visualizeResultsStart(self,filename,scale.get(),scalePPM.get(),PPMThreshold.state(),scanNumber2.get(),library,recursive,iso,peaks,dtype))
+                                            command=lambda: visualizeResultsStart(self,filename,scale.get(),scalePPM.get(),PPMThreshold.state(),scanNumber2.get(),recursive,iso,peaks,dtype))
         visualizeResultsButton.grid(row=5,column=6,pady=10, padx=10)
 
         writeResultsButton = ttk.Button(RightTop, text="Write Filtered Results",
-                                        command=lambda: writeResults(filename.get(),scale.get(),scalePPM.get(),PPMThreshold.state(),scanNumber2.get(),library,recursive,iso,peaks))
+                                        command=lambda: writeResults(filename.get(),scale.get(),scalePPM.get(),PPMThreshold.state(),scanNumber2.get(),recursive,iso,peaks))
         writeResultsButton.grid(row=6,column=6,pady=10, padx=10)

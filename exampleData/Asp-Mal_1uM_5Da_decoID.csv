@@ -1,0 +1,2 @@
+#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID
+0,133.014373779297,0.45985111999999995,133.0142,7.25,C4H6O5,636-61-3,MALATE,131,99.97010374058118,-1.306470060813177,0.8241684872401863,636-61-3
