@@ -19,14 +19,16 @@ LARGE_FONT = ("Verdana", 12)
 RESOLUTIONS = [-1,0,1,2]
 METHODS = ["dot","eV","NCE"]
 PPMFILTER = [False,True]
+RT = [True,False]
+MZCLOUDSELECTION = ["reference","autoprocessing","none","none","none"]
 
 if getattr(sys, 'frozen', False):
     application_path = sys._MEIPASS
-    DATABASESELCTION = ["none", os.path.join(application_path,"MoNA-export-Experimental_Spectra.db"), os.path.join(application_path,"HMDB_experimental.db"),
+    DATABASESELCTION = ["none","none", os.path.join(application_path,"MoNA-export-LC-MS-MS_Spectra.db"), os.path.join(application_path,"HMDB_experimental.db"),
                         "custom"]
 elif __file__:
     application_path = os.path.dirname(__file__)
-    DATABASESELCTION = ["none", os.path.join(application_path,"../databases/MoNA-export-Experimental_Spectra.db"), os.path.join(application_path,"../databases/HMDB_experimental.db"),
+    DATABASESELCTION = ["none","none", os.path.join(application_path,"../databases/MoNA-export-LC-MS-MS_Spectra.db"), os.path.join(application_path,"../databases/HMDB_experimental.db"),
                         "custom"]
 
 class decoIDSearch(Tk):
@@ -89,20 +91,31 @@ class Radiobar(Frame):
 def browseForFile(filename,types):
     filename.set(filedialog.askopenfilename(filetypes=types))
 
-def performSearch(filename,numCores,recursive,iso,peaks,dtype,massAcc,custOrMzCloud,libFile,searchMethod,filenamePeak,offset):
+def performSearch(filename,numCores,recursive,iso,peaks,dtype,massAcc,custOrMzCloud,libFile,searchMethod,filenamePeak,offset,useRT,rtTol,key):
     file = filename.get()
     libraryFile = libFile.get()
     peakFile = filenamePeak.get()
     if peakFile == "No File Selected":
         peakFile = ""
 
+    apikey = open(key.get()).readline().rstrip()
+
     db = DATABASESELCTION[custOrMzCloud.state()]
     if db != "custom":
         libraryFile = db
 
+    mzCloudLib = MZCLOUDSELECTION[custOrMzCloud.state()]
+
+
+    usert = RT[useRT.state()]
+    if useRT:
+        rtTolerance = float(rtTol.get())
+
+    else:
+        rtTolerance = float("inf")
+
     threshold = 0#scale.get()
-    resPenalty = 100#scaleRes.get()
-    useAuto = 1
+
     useIso = 0
     usePeaks = 0
     doDeco = 1
@@ -126,11 +139,11 @@ def performSearch(filename,numCores,recursive,iso,peaks,dtype,massAcc,custOrMzCl
     fragThresh = 0#scaleFragment.get()
 
 
-    thr = threading.Thread(target=createWaitingBox,args=(file,threshold,fragThresh,numCores.get(),useAuto,useRec,useIso,usePeaks,DDA,MA,libraryFile,doDeco,peakFile,offset))
+    thr = threading.Thread(target=createWaitingBox,args=(file,threshold,fragThresh,numCores.get(),mzCloudLib,useRec,useIso,usePeaks,DDA,MA,libraryFile,doDeco,peakFile,offset,rtTolerance,apikey))
     thr.start()
 
 
-def createWaitingBox(file,threshold,fragThresh,numCores,useAuto,useRec,useIso,usePeaks,DDA,massAcc,libFile,doDeco,peakFile,offset):
+def createWaitingBox(file,threshold,fragThresh,numCores,mzcloudLib,useRec,useIso,usePeaks,DDA,massAcc,libFile,doDeco,peakFile,offset,rtTolerance,key):
     def cancelSearch(proc,var,top):
         proc.kill()
         var.set("Search Canceled")
@@ -148,7 +161,7 @@ def createWaitingBox(file,threshold,fragThresh,numCores,useAuto,useRec,useIso,us
     progress['value'] = 1.0
     numCores = int(numCores)
     def runDeco():
-        decID = DecoID(libFile, useAuto, numCores)
+        decID = DecoID(libFile, mzcloudLib, numCores,api_key=key)
         decID.readData(file ,2,usePeaks,DDA,massAcc,peakDefinitions=peakFile,offset=offset)
 
         if doDeco:
@@ -156,9 +169,9 @@ def createWaitingBox(file,threshold,fragThresh,numCores,useAuto,useRec,useIso,us
             else: lam = 100
             if useRec and DDA:
                 decID.identifyUnknowns(iso=useIso)
-            decID.searchSpectra(q,lam,fragThresh,useIso,threshold)
+            decID.searchSpectra(q,lam,fragThresh,useIso,threshold,rtTol=rtTolerance)
         else:
-            decID.searchSpectra(q,np.inf,fragThresh,useIso,threshold)
+            decID.searchSpectra(q,np.inf,fragThresh,useIso,threshold,rtTol=rtTolerance)
 
     p = Process(target=runDeco(),args=())
 
@@ -625,32 +638,54 @@ class StartPage(Frame):
         menu.grid(row=0,column=1,pady=10, padx=10)
         procNumFrame.grid(row=1,column=0)
 
-        library = Radiobar(LeftTop, ['Yes', 'No'], label="Use Autoprocessed Library:")
-        #library.grid(row=3,column=0,pady=10, padx=10)
+        useRT = Radiobar(LeftTop, ['Yes', 'No'], label="Use Retention Time:")
+        useRT.grid(row=2,column=0,pady=10, padx=10)
+
+        RTFrame = Frame(LeftTop)
+        Label(RTFrame,text="Retention Time Tolerance (minutes)").grid(row=0,column=0,pady=10)
+        rtTol = StringVar()
+        rtTol.set(".5")
+        Label(RTFrame,textvariable = rtTol).grid(row=0,column=1,pady=10,padx=10)
+
+        def val3(input):
+            if input == "": return True
+            try:
+                t = float(input)
+                rtTol.set(str(t))
+                return True
+            except:
+                isoWindow.set("")
+                return False
+
+        e = Entry(RTFrame, width=3, textvariable=rtTol, validate="key",
+                  vcmd=(RTFrame.register(val3), ('%P',)))
+        e.grid(row=0, column=2, pady=10, padx=10)
+
+        RTFrame.grid(row=3,column=0,pady=10,padx=10)
 
         standardOrDeco = Radiobar(LeftTop, ['Pairwise', 'Deconvolution'], label="Search Method:")
-        standardOrDeco.grid(row=2,column=0,pady=10, padx=10)
+        standardOrDeco.grid(row=4,column=0,pady=10, padx=10)
 
         recursive = Radiobar(LeftTop, ['Yes', 'No'], label="Use Predicted Unknown Library:")
-        recursive.grid(row=3,column=0,pady=10, padx=10)
+        recursive.grid(row=5,column=0,pady=10, padx=10)
 
         iso = Radiobar(LeftTop, ['Yes', 'No'], label="Use Simulated M+1 Isotopologue Spectra:")
-        iso.grid(row=4,column=0,pady=10, padx=10)
+        iso.grid(row=6,column=0,pady=10, padx=10)
 
         peaks = Radiobar(LeftTop, ['Yes', 'No'], label="Use MS1 data:")
-        peaks.grid(row=5,column=0,pady=10, padx=10)
+        peaks.grid(row=7,column=0,pady=10, padx=10)
 
         dtype = Radiobar(LeftTop, ['DDA', 'DIA'], label="Data Acquisition Method:")
-        dtype.grid(row=6,column=0,pady=10, padx=10)
+        dtype.grid(row=8,column=0,pady=10, padx=10)
 
         massAccFrame = Frame(LeftTop)
         Label(massAccFrame, text="Mass PPM Tolerance").grid(row=0,column=0,pady=10, padx=10)
         scaleAcc = Scale(massAccFrame, orient='horizontal', from_=1, to=50)
         scaleAcc.set(5)
         scaleAcc.grid(row=0,column=1,pady=10, padx=10)
-        massAccFrame.grid(row=7,column=0)
+        massAccFrame.grid(row=9,column=0)
 
-        Label(LeftTop,text="Isolation Window Width (Da, required for non-thermo data)").grid(row=8,column=0)
+        Label(LeftTop,text="Isolation Window Width (Da, required for non-thermo data)").grid(row=10,column=0)
         isoWindowFrame = Frame(LeftTop)
         isoWindow = StringVar()
         isoWindow.set("1")
@@ -670,7 +705,7 @@ class StartPage(Frame):
         e = Entry(isoWindowFrame, width=3, textvariable=isoWindow, validate="key",
                   vcmd=(isoWindowFrame.register(val3), ('%P',)))
         e.grid(row=0, column=2, pady=10, padx=10)
-        isoWindowFrame.grid(row=9, column=0)
+        isoWindowFrame.grid(row=11, column=0)
 
 
         RightTop = LeftTop#Frame(parent,width=1000,height=1000,pady=3,padx=3,bd=1)#,bg="white")
@@ -681,7 +716,7 @@ class StartPage(Frame):
         f.configure(underline=True)
         lab.configure(font=f)
 
-        custOrMzCloud = Radiobar(LeftTop, ['mzCloud', "MoNA", "HMDB",'Custom Library'], label="Library Choice:")
+        custOrMzCloud = Radiobar(LeftTop, ['mzCloud (reference)','mzCloud (autoprocessing)', "MoNA", "HMDB",'Custom Library'], label="Library Choice:")
         custOrMzCloud.grid(row=1,column=3)
 
         libraryFile = StringVar()
@@ -691,36 +726,44 @@ class StartPage(Frame):
                                       command=lambda: browseForFile(libraryFile,types=[("tsv","*.tsv"),("database",".db"),("msp",".msp")]))
         browseLibFileButton.grid(row=3,column=3,pady=10)
 
+
+        mzCloudAPIFile = StringVar()
+        mzCloudAPIFile.set("No File Selected")
+        Label(LeftTop,textvariable=mzCloudAPIFile).grid(row=4,column=3,pady=10)
+        browsemzCloudKeyFileButton = ttk.Button(LeftTop,text="Select mzCloud API Key File",
+                                                command=lambda:browseForFile(mzCloudAPIFile,types=[("txt","*.txt")]))
+        browsemzCloudKeyFileButton.grid(row=5,column=3,pady=10)
+
         lab = Label(RightTop, text="Select MS Datafile", font=LARGE_FONT)
-        lab.grid(row=4,column = 3,pady=10,padx=10)
+        lab.grid(row=6,column = 3,pady=10,padx=10)
         f = font.Font(label,label.cget("font"))
         f.configure(underline=True)
         lab.configure(font=f)
 
         filename = StringVar()
         filename.set("No File Selected")
-        Label(LeftTop, textvariable=filename).grid(row=5,column=3,pady=10)
+        Label(LeftTop, textvariable=filename).grid(row=7,column=3,pady=10)
         browseFileButton = ttk.Button(LeftTop, text="Select File",
                                       command=lambda: browseForFile(filename,types=[("mzML",".mzML"),("Thermo", "*.raw"),("Agilent","*.d"),("All Files","*")]))
-        browseFileButton.grid(row=6,column=3,pady=10)
+        browseFileButton.grid(row=8,column=3,pady=10)
 
         lab = Label(RightTop, text="Select Peak Information File", font=LARGE_FONT)
-        lab.grid(row=7, column=3, pady=10, padx=10)
+        lab.grid(row=9, column=3, pady=10, padx=10)
         f = font.Font(label, label.cget("font"))
         f.configure(underline=True)
         lab.configure(font=f)
 
         filenamePeak = StringVar()
         filenamePeak.set("No File Selected")
-        Label(LeftTop, textvariable=filenamePeak).grid(row=8, column=3, pady=10)
+        Label(LeftTop, textvariable=filenamePeak).grid(row=10, column=3, pady=10)
         browsePeakFileButton = ttk.Button(LeftTop, text="Select File (optional for DDA)",
                                       command=lambda: browseForFile(filenamePeak,
                                                                     types=[("csv", "*.csv"),
                                                                            ("All Files", "*")]))
-        browsePeakFileButton.grid(row=9, column=3, pady=10)
+        browsePeakFileButton.grid(row=11, column=3, pady=10)
         runSearchButton = ttk.Button(LeftTop, text="Search",
-                                     command=lambda: performSearch(filename,numCores,recursive,iso,peaks,dtype,scaleAcc,custOrMzCloud,libraryFile,standardOrDeco,filenamePeak,float(isoWindow.get())/2))
-        runSearchButton.grid(row=10,column = 3,pady
+                                     command=lambda: performSearch(filename,numCores,recursive,iso,peaks,dtype,scaleAcc,custOrMzCloud,libraryFile,standardOrDeco,filenamePeak,float(isoWindow.get())/2,useRT,rtTol,mzCloudAPIFile))
+        runSearchButton.grid(row=12,column = 3,pady
         =10, padx=10)
 
 

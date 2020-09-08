@@ -1,22 +1,21 @@
 from DecoID.DecoID import DecoID
 libFile = "../databases/mzCloud_reference.db"
 key = open("../housekeeping/mzCloud_api_key.txt").readline().rstrip()
-mzCloudLib = "reference"
-numCores = 10#int(sys.argv[2])
-file = "../exampleData/Asp-40uM_Mal1uM_1Da_NCE30_750ms_NCE50.mzML"#sys.argv[1]
+useAuto = True
+numCores = 15#int(sys.argv[2])
+file = "../exampleData/IROA_P1-6_DIA_test_pos1.mzML"#sys.argv[1]
 
 usePeaks = True
-DDA = True#False
-massAcc = 25
+DDA = False
+massAcc = 10
 fragThresh= 0.01
 offset = 25
-useIso = True
+useIso = False
 threshold = 0
 lam = 0
 rtTol = float("inf")
 if __name__ == '__main__':
     #multiprocessing.set_start_method("spawn")
-    decID = DecoID(libFile, mzCloudLib, numCores,api_key=key)
-    decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions="../exampleData/peak_table.csv")
-    decID.identifyUnknowns(rtTol=rtTol)
+    decID = DecoID(libFile, useAuto, numCores,api_key=key)
+    decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions="../exampleData/IROA_p1-6_peak_table_pos_v3.csv")
     decID.searchSpectra("y", lam , fragThresh, useIso, threshold,rtTol=rtTol)

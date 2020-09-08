@@ -16,10 +16,33 @@ import gzip
 import pickle as pkl
 import dill
 import pandas as pd
+import itertools
 import uuid
-import grequests
 import numpy as np
 np.seterr(divide='ignore', invalid='ignore')
+
+import requests
+import json
+if getattr(sys, 'frozen', False):
+    application_path = sys._MEIPASS
+    MZCOMPOUNDTREELINK = {"reference": pkl.load(
+        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+        "autoprocessing": pkl.load(open(os.path.join(application_path,
+                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                        "rb"))}
+elif __file__:
+
+    application_path = os.path.dirname(__file__)
+    MZCOMPOUNDTREELINK = {"reference": pkl.load(
+        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+        "autoprocessing": pkl.load(open(os.path.join(application_path,
+                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                        "rb"))}
+
+timeout = 30
+CONCURRENTREQUESTMAX = 1
+MAXMASS = 5000
+
 import molmass
 import scipy.optimize as opt
 import sklearn.linear_model as linModel
@@ -115,6 +138,7 @@ def dotProductSpectra(foundSpectra,b):
     :return: Cosine similarity of the two spectrum in a scale of 0-1
     """
     #if input spectra are dictionaries
+
     if type(foundSpectra) == type(dict()):
         mzs = set(foundSpectra.keys()).intersection(set(b.keys())) #get shared mzs
         num = np.sum([foundSpectra[x]*b[x] for x in mzs]) #compute num
@@ -147,113 +171,65 @@ def flatten(l):
 
 
 
-def scoreDeconvolution(originalSpectra, matrix, res, metIDs, treeIDs, masses, centerMz, DDA, massAcc):
+def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt):
 
     """Goal is to take deconvolved aspects of the spectra"""
-    numComponents = len([x for x in range(len(res)) if res[x] > 0 if type(metIDs[x]) != type(tuple())])
-    numComponents += len(set([treeIDs[x] for x in range(len(res)) if res[x] > 0 and type(metIDs[x]) == type(tuple)]))
-    resScores = [[0,[0 for _ in originalSpectra],[0 for _ in originalSpectra],"original",masses[x]] for x in range(len(res))]
+    numComponents = len([x for x in range(len(res)) if res[x] > 0])
+    resScores = [[0,[0 for _ in originalSpectra],[0 for _ in originalSpectra],"original",masses[x],rts[x]] for x in range(len(res))]
     if len(matrix) > 0:
-        solvedSpectraTotal = np.dot(np.transpose(matrix),[[x] for x in res])
+        solvedSpectraTotal = np.dot(np.transpose(matrix),res)
         differences =  np.subtract(flatten(originalSpectra),flatten(solvedSpectraTotal))/numComponents
     else:
-        solvedSpectraTotal = [0 for _ in originalSpectra]
         differences = flatten(originalSpectra)
 
-
-
-    components = []
-    uniqueIsotope = {(metIDs[x][0],t):{"spectrum":-1,"indices":[],"mass":-1,"abundance":0} for x,t in zip(range(len(metIDs)),treeIDs) if type(metIDs[x]) == type(tuple())}
-    allUniqueIsotope = {(metIDs[x][0],t):{"spectrum":-1,"indices":[],"mass":-1,"abundance":0} for x,t in zip(range(len(metIDs)),treeIDs) if type(metIDs[x]) == type(tuple())}
-
-    componentsMass = []
     #Form components
+    components = []
+    componentsMass = []
+    componentRts = []
     componentName = []
     componentAbudance = []
+
     allComponents = []
-    allComponentMass = []
-    allComponentName = []
-    allComponentAbundance = []
+    allComponentsMass = []
+    allComponentsRts = []
+    allComponentsName = []
+    allComponentsAbundance = []
 
     resSum = np.sum(res)
     if len([x for x in res if x > 0]) > 1:
         for x in range(len(res)):
             if res[x] > 0:
-                if (abs(masses[x]-centerMz)/centerMz*1e6 < massAcc):
-                    if type(metIDs[x]) != type(tuple()):
-                        components.append([max([res[x] * m + d, 0]) for m, d in zip(matrix[x], differences)])
-                        componentsMass.append(masses[x])
-                        componentName.append(str(metIDs[x]))
-                        componentAbudance.append(res[x])
-                    else:
-                        uniqueIsotope[(metIDs[x][0],treeIDs[x])]["spectrum"] = [res[x] * m for m in matrix[x]]
-                        uniqueIsotope[(metIDs[x][0],treeIDs[x])]["mass"] = masses[x]
-                        uniqueIsotope[(metIDs[x][0], treeIDs[x])]["indices"].append(x)
-                        uniqueIsotope[(metIDs[x][0], treeIDs[x])]["abundance"] += res[x]
+                if (abs(masses[x]-centerMz)/centerMz*1e6 < massAcc) and (rts[x] < 0 or abs(rts[x] - rt) < rtTol):
+                    components.append([max([res[x] * m + d, 0]) for m, d in zip(matrix[x], differences)])
+                    componentsMass.append(masses[x])
+                    componentName.append(str(metIDs[x]))
+                    componentAbudance.append(res[x]/resSum)
+                    componentRts.append(rts[x])
+
+                allComponents.append([max([res[x] * m + d, 0]) for m, d in zip(matrix[x], differences)])
+                allComponentsMass.append(masses[x])
+                allComponentsName.append(str(metIDs[x]))
+                allComponentsAbundance.append(res[x]/resSum)
+                allComponentsRts.append(rts[x])
 
 
-                # closestFrag = [[abs(masses[x]-f),f] for f in fragments]
-                # closestFrag.sort(key=lambda x: x[0])
-                # closestFrag = closestFrag[0][1]
-                if type(metIDs[x]) != type(tuple()):
-                    allComponents.append([max([res[x] * m + d, 0]) for m, d in zip(matrix[x], differences)])
-                    allComponentMass.append(masses[x])
-                    allComponentName.append(str(metIDs[x]))
-                    allComponentAbundance.append(res[x])
-                else:
-                    allUniqueIsotope[(metIDs[x][0], treeIDs[x])]["spectrum"] = [res[x] * m for m in matrix[x]]
-                    allUniqueIsotope[(metIDs[x][0],treeIDs[x])]["mass"] = masses[x]
-                    allUniqueIsotope[(metIDs[x][0], treeIDs[x])]["indices"].append(x)
-                    allUniqueIsotope[(metIDs[x][0], treeIDs[x])]["abundance"] += res[x]
+    components = {(name,m,r,ab):s for m,s,name,ab,r in zip(componentsMass,components,componentName,componentAbudance,componentRts)}
+    allComponents = {(name,m,r,ab):s for m,s,name,ab,r in zip(allComponentsMass,allComponents,allComponentsName,allComponentsAbundance,allComponentsRts)}
 
-
-
-        for x in uniqueIsotope:
-            if len(uniqueIsotope[x]["indices"]) > 0:
-                components.append([max([p+d,0]) for p,d in zip(uniqueIsotope[x]["spectrum"],differences)])
-                componentsMass.append(uniqueIsotope[x]["mass"])
-                componentName.append(x[0] + " M+1")
-                truePercentage = sum([res[i] for i in uniqueIsotope[x]["indices"]])/len(uniqueIsotope[x]["indices"])
-                componentAbudance.append(truePercentage)
-                for ind in uniqueIsotope[x]["indices"]:
-                    matrix[ind] = uniqueIsotope[x]["spectrum"]
-                    res[ind] = truePercentage
-
-        for x in allUniqueIsotope:
-            if len(allUniqueIsotope[x]["indices"]) > 0:
-                allComponents.append([max([p+d,0]) for p,d in zip(allUniqueIsotope[x]["spectrum"],differences)])
-                allComponentMass.append(allUniqueIsotope[x]["mass"])
-                allComponentName.append(x[0] + " M+1")
-                truePercentage = sum([res[i] for i in allUniqueIsotope[x]["indices"]])/len(allUniqueIsotope[x]["indices"])
-                allComponentAbundance.append(truePercentage)
-                for ind in allUniqueIsotope[x]["indices"]:
-                    matrix[ind] = allUniqueIsotope[x]["spectrum"]
-                    res[ind] = truePercentage
-
-    components = {(name,m,ab/resSum):s for m,x,s,name,ab in zip(componentsMass,range(len(componentsMass)),components,componentName,componentAbudance)}
-    allComponents = {(name,m,ab/resSum):s for m,x,s,name,ab in zip(allComponentMass,range(len(allComponentMass)),allComponents,allComponentName,allComponentAbundance)}
-
-
-    #components.append(originalSpectra)
-    #componentsMass.append(centerMz)
-    components[("original",centerMz,0.0)] = originalSpectra
-    #components.append([max([d,0.0]) for d in differences])
-    #componentsMass.append(centerMz)
+    components[("original",centerMz,rt,0.0)] = originalSpectra
     if len([x for x in res if x > 0]) > 1:
-        components[("residual",centerMz,0.0)] = [max([d,0.0]) for d in differences]
+        components[("residual",centerMz,rt,0.0)] = [max([d,0.0]) for d in differences]
 
-    allComponents[("original",centerMz,0.0)] = originalSpectra
-    #components.append([max([d,0.0]) for d in differences])
-    #componentsMass.append(centerMz)
+    allComponents[("original",centerMz,rt,0.0)] = originalSpectra
     if len([x for x in res if x > 0]) > 1:
-        allComponents[("residual",centerMz,0.0)] = [max([d,0.0]) for d in differences]
+        allComponents[("residual",centerMz,rt,0.0)] = [max([d,0.0]) for d in differences]
 
     for x in range(len(res)):
-        for comp,mz,ab in components:
-            if abs(mz-masses[x])/masses[x]*1e6 < massAcc:
-                dp = 100*dotProductSpectra(matrix[x],components[(comp,mz,ab)])
+        for comp,mz,r,ab in components:
+            if abs(centerMz-masses[x])/masses[x]*1e6 < massAcc and (rts[x] < 0 or abs(rts[x]-rt) < rtTol):
+                dp = 100*dotProductSpectra(matrix[x],components[(comp,mz,r,ab)])
                 if dp > resScores[x][0]:
-                    resScores[x] = [dp,components[(comp,mz,ab)],matrix[x],comp,centerMz]
+                    resScores[x] = [dp,components[(comp,mz,r,ab)],matrix[x],comp,centerMz,rt]
     return resScores,allComponents
 
 def safeDivide(num,denom):
@@ -264,57 +240,73 @@ def safeDivide(num,denom):
     else:
         return num/denom
 
-
-
 def splitList(l, n):
     n = int(np.ceil(len(l)/float(n)))
     return list([l[i:i + n] for i in range(0, len(l), n)])
 
-def createM1SpectrumfromM0(spectra,formula,numFrags=5):
+def createM1SpectrumfromM0(spectra,formula,polarity,ppmError = 5):
 
     if len(spectra) > 0:
-        newSpectra = []
-        frags = [f for f in spectra]
-        frags.sort(key=lambda x:spectra[x],reverse=True)
-        if len(frags) > numFrags:
-            frags = frags[:numFrags]
-        for frag in frags:
-            tempMzs = dict(spectra)
-            tempMzs[frag] = 0
-            tempMzs[frag+massIncrease] = spectra[frag]
-            newSpectra.append(tempMzs)
-        sumSpectra = newSpectra[0]
-        for spec in newSpectra[1:]:
-            for m in spec:
-                if m in sumSpectra:
-                    sumSpectra[m] += spec[m]
+        f = molmass.Formula(formula)  # create formula object
+        comp = f.composition()
+        masses = []
+        bounds = []
+        carbon_pos = -1
+        i = 0
+        for row in comp:
+            tmp = molmass.Formula(row[0])
+            massC = tmp.isotope.mass
+            masses.append(massC)
+            if row[0] == "C":
+                carbon_pos = i
+            if row[0] == "H":
+                if polarity == "Positive":
+                    bounds.append(int(row[1]+1))
                 else:
-                    sumSpectra[m] = spec[m]
+                    bounds.append(int(row[1]-1))
+            else:
+                bounds.append(int(row[1]))
+            i += 1
+
+
+        masses = np.array(masses)
+        bounds = np.array(bounds)
+        spectra = {str(x):val for x,val in spectra.items()}
+        frags = [x for x in spectra.keys()]
+        intens = [spectra[x] for x in frags]
+
+        subs_lists = [list(range(int(b + 1))) for b in bounds]
+        sub_forms = list(itertools.product(*subs_lists))
+
+        subsForFrags = {f: [] for f in frags}
+        maxMass = -1
+        for s in sub_forms:
+            mass = np.dot(s, masses.transpose())
+            if mass > maxMass:
+                maxMass = mass
+            for f in frags:
+                if 1e6 * np.abs(mass - float(f)) / float(f) < ppmError:
+                    subsForFrags[f].append(list(s))
+        subsForFrags = {key: np.array(val) for key, val in subsForFrags.items()}
+
+        mPlus1 = {}
+        for f, i in zip(frags, range(len(frags))):
+            if len(subsForFrags[f]) > 0:
+                prob_c13_in_frag = np.mean(subsForFrags[f][:, carbon_pos]) / bounds[carbon_pos]
+                mPlus1[float(f)] = intens[i] * (1 - prob_c13_in_frag)
+                mz = float(f) + 1.003
+                mPlus1[mz] = intens[i] * prob_c13_in_frag
+        if len(mPlus1) > 0:
+            maxVal = np.max(list(mPlus1.values()))
+            mPlus1 = {key: val / maxVal for key, val in mPlus1.items()}
+        else:
+            print("bad")
+            print(formula, bounds, molmass.Formula(formula).isotope.mass,maxMass)
+            print(spectra)
     else:
-        newSpectra = [{}]
-        sumSpectra = {}
-    return newSpectra, sumSpectra
+        mPlus1 = {}
 
-
-def cleanIsotopes(result):
-    isotopes = set([(x[0][0],x[1],x[2],x[4]) for x in result if type(x[0]) == type(tuple())])
-    update = {(key[3],key[0],key[1],key[2],key[4]):val for key,val in result.items() if type(key[0]) != type(tuple())}
-    for iso in isotopes:
-        scores = []
-        comp = 0.0
-        for metID,tree,mass,name,c in result:
-            if type(metID) == type(tuple()) and metID[0] == iso[0] and iso[1] == tree:
-                scores.append(result[(metID,tree,mass,name,c)][0])
-                metOfInterest = metID
-                treeOfInterest = tree
-                massOfInterest = mass
-                nameOfInterest = name
-                compOfInterest = c
-                comp = c
-        scores = np.mean(scores)
-        update[(str(nameOfInterest[0]) + " (M+1)",iso[0],iso[1],iso[2],comp)] = [scores] + result[(metOfInterest,treeOfInterest,massOfInterest,nameOfInterest,compOfInterest)][1:]
-    return update
-
+    return mPlus1#,{key:val[:,carbon_pos] for key,val in subsForFrags.items() if len(val) > 0}
 
 def collapse1Fold(spec):
     inc = 10
@@ -379,7 +371,7 @@ def mergeSpectrum(consensous,toAdd):
     return new
 
 
-def getMatricesForGroup(trees,spectra,possCompounds,possIsotopes,isotope,res,clusters):
+def getMatricesForGroup(trees,spectra,res,clusters):
 
     spectrum = dict(spectra[0])
     for spec in spectra[1:]:
@@ -389,72 +381,40 @@ def getMatricesForGroup(trees,spectra,possCompounds,possIsotopes,isotope,res,clu
             else:
                 spectrum[m] = i
 
-    compoundDict = pullMostSimilarSpectra({key:val for key,val in trees.items() if key in possCompounds},spectrum)
-    compoundDict = {key: [val[0], collapseAsNeeded(val[1],res)] for key,val in compoundDict.items()}#convertSpectra2Vector(val[0], MAXMASS, res)] for key, val in
-                    #compoundDictFull.items()}
+    compoundDict = pullMostSimilarSpectra(trees,spectrum)
 
     keys = list(compoundDict.keys())
-
-    if isotope:
-        isotopeDictFull = pullMostSimilarSpectraIsotopologues({key:val for key,val in trees.items() if key in possIsotopes}, spectrum)
-
-        isotopeDict2 = {}
-        for key, val in isotopeDictFull.items():
-            isotopeSpectras = val[1]
-            for spec, num in zip(isotopeSpectras, range(len(isotopeSpectras))):
-                tempKey = ((str(key[0]), num), key[1], key[2] + 1.003, (key[3], num))
-                isotopeDict2[tempKey] = [key[1], spec]
-        isotopeKeys = list(isotopeDict2.keys())
-        isotopeDict = {key: [val[0], collapseAsNeeded(val[1], res)] for key, val in isotopeDict2.items()}
-
 
     if type(clusters) != type(None):
         clusterKeys = list(clusters.keys())
 
     metIDs = [x[0] for x in keys]
-    spectraTrees = [x[1] for x in keys]
-    masses = [x[2] for x in keys]
-    metNames = [x[3] for x in keys]
+    masses = [x[1] for x in keys]
+    metNames = [x[2] for x in keys]
     spectraIDs = [compoundDict[x][0] for x in keys]
+    rts = [x[3] for x in keys]
+    formulas = [x[4] for x in keys]
     matrix = [compoundDict[x][1] for x in keys]
-
-    if isotope:
-        metIDs += [x[0] for x in isotopeKeys]
-        masses += [x[2] for x in isotopeKeys]
-        spectraTrees += [x[1] for x in isotopeKeys]
-        spectraIDs += [isotopeDict[x][0] for x in isotopeKeys]
-        metNames += [x[3] for x in isotopeKeys]
-        matrix += [isotopeDict[x][1] for x in isotopeKeys]
 
     if type(clusters) != type(None):
         metIDs += [str(key[0]) + "|" + str(np.mean(key[2])) for key in clusterKeys]
         masses += [key[0] for key in clusterKeys]
-        spectraTrees += [-1 for _ in clusterKeys]
         spectraIDs += [-1 for _ in clusterKeys]
         metNames += [
-            "Predicted Analyte: m/z = " + str(np.round(key[0], 5)) + " rt_Range: [" + str(key[1]) + "-" + str(
-                key[2]) + "]" for key in clusterKeys]
+            "Predicted Analyte: m/z = " + str(np.round(key[0], 5)) + " rt: " +str(np.round(np.mean(key[1:]),2)) for key in clusterKeys]
         matrix += [clusters[key] for key in clusterKeys]
+        rts += [np.mean(key[1:]) for key in clusterKeys]
+        formulas += ["-1" for _ in clusterKeys]
 
-        # convert dicts to lists for deconvolution
-
-    coeffs = []
-    for m in metIDs:
-        if type(m) != type(tuple()):
-            coeffs.append(1.0)
-        else:
-            coeffs.append(1.0)
-            # coeffs.append(len([m1 for m1 in mets if type(m1) == type(tuple()) and m1[0] == m[0]]))
     indexRef = [np.round(x * 10 ** (-1 * res), res) for x in list(range(int(MAXMASS * 10 ** res)))]
     indices = list(set(flatten([list(spectrum.keys())] + [list(m.keys()) for m in matrix])))
     indices.sort()
 
     indicesAll = [indexRef.index(np.round(x, res)) for x in indices]
-    matrix = [[s * c for s in normalizeSpectra([getVal(m, x) for x in indices])] for m, c in
-                      zip(matrix, coeffs)]
+    matrix = [normalizeSpectra([getVal(m, x) for x in indices]) for m in matrix]
     reduceSpec = [[getVal(spec, x) for x in indices] for spec in spectra]
 
-    return metIDs, spectraTrees, spectraIDs, matrix, masses, metNames, indicesAll, reduceSpec
+    return metIDs,spectraIDs,matrix,masses,metNames,rts,formulas,indicesAll, reduceSpec
 
 def pullMostSimilarSpectra(trees,spectra):
     returnDict = {}
@@ -475,32 +435,28 @@ def getVal(dict,key):
 
 
 # determine if m/z is within ppmThresh of an m/z in fragments
-def inScan(fragments,rt,candidate_mz,candidate_rt,ppmThresh=10,rt_thresh = .5):
-    if candidate_rt == -1 or (abs(rt-candidate_rt) < rt_thresh):
-        if type(fragments) != type(str()):
-            try:
-                if any(abs(candidate_mz-x)/candidate_mz/(1e-6) < ppmThresh for x in fragments):
-                    return True
-                else:
-                    return False
-            except:
-                print(candidate_mz,fragments)
-        else:
-            return True
-    else:
-        return False
-
-def inScanIso(fragments,rt,candidate_mz,candidate_rt,ppmThresh=10,rt_thresh = .5):
-    if candidate_rt == -1 or (abs(rt-candidate_rt) < rt_thresh):
-        if type(fragments) != type(str()):
-            if any(abs(candidate_mz - x) / candidate_mz / (1e-6) < ppmThresh for x in fragments) and any(abs(candidate_mz-1.003 - x)/(candidate_mz-1.003)/(1e-6) < ppmThresh for x in fragments):
+def inScan(fragments,candidate_mz,ppmThresh=10):
+    if type(fragments) != type(str()):
+        try:
+            if any(abs(candidate_mz-x)/candidate_mz/(1e-6) < ppmThresh for x in fragments):
                 return True
             else:
                 return False
-        else:
-            return True
+        except:
+            print(candidate_mz,fragments)
     else:
-        return False
+        return True
+
+
+def inScanIso(fragments,candidate_mz,ppmThresh=10):
+    if type(fragments) != type(str()):
+        if any(abs(candidate_mz - x) / candidate_mz / (1e-6) < ppmThresh for x in fragments) and any(abs(candidate_mz-1.003 - x)/(candidate_mz-1.003)/(1e-6) < ppmThresh for x in fragments):
+            return True
+        else:
+            return False
+    else:
+        return True
+
 
 
 #https://stackoverflow.com/questions/12141150/from-list-of-integers-get-number-closest-to-a-given-value
@@ -654,14 +610,14 @@ class DecoID():
     using LASSO regression.
 
     :param libFile: string, path to database file or "none" to use mzCloud
-    :param useAuto: bool, only applies to mzCloud, True to use autoprocessing library in addition to reference. False
+    :param mzCloud_lib: str, only applies to mzCloud, specifies library to seach: reference or autoprocessing
         to only use reference library
     :param numCores: int, Number of parralel processes to use.
     :param resolution: int, Number of decimal places to consider for m/z values of MS/MS peaks
     :param label: str, optional label to add to the end of output files
     :param api_key: str, for use of mzCloud api, access key must be entered
     """
-    def __init__(self,libFile,useAuto = False,numCores=1,resolution = 2,label="",api_key="none"):
+    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none"):
 
         self.libFile = libFile
         self.useDBLock = False
@@ -697,7 +653,7 @@ class DecoID():
                                     if cpdid == -1:
                                         cpdid = name
                                     if id != -1 and len(spectrum) > 0:
-                                        self.library[polarity][id] = {"id":id,"cpdID":cpdid,"rt":rt,"formula":formula,"name":replaceAllCommas(name),"mode":polarity,"spectrum":spectrum,"m/z":np.round(mz,4)}
+                                        self.library[polarity][id] = {"id":id,"cpdID":cpdid,"rt":rt,"formula":formula,"name":replaceAllCommas(name),"mode":polarity,"spec":spectrum,"m/z":np.round(mz,4)}
                                         good = True
 
 
@@ -750,13 +706,11 @@ class DecoID():
             self.lib = customDBpy
             self.cachedReq = "none"
             self.ms_ms_library = "custom"
-            self.useAuto = useAuto
         #for binrary datbabase files
         elif ".db" in libFile:
             self.lib = customDBpy
             self.cachedReq = "none"
             self.ms_ms_library = "custom"
-            self.useAuto = useAuto
             self.library = pkl.load(open(libFile,"rb"))
             print("Library loaded successfully: " + str(
                 len(self.library["Positive"]) + len(self.library["Negative"])) + " spectra found")
@@ -765,12 +719,7 @@ class DecoID():
             self.useDBLock = True
             self.lib = mzCloudPy
             self.ms_ms_library = "mzCloud"
-            self.library = ["reference"]
-            self.useAuto = useAuto
-
-
-            if useAuto:
-                self.library.append("autoprocessing")
+            self.library = mzCloud_lib
 
         self.key = api_key
         self.numCores = numCores
@@ -843,15 +792,14 @@ class DecoID():
                 if self.DDA: #if DDA group spectra using peak information
                     i = -1
                     goodSamps = []
-                    for samp in samples:
-                        i += 1
-                        for index in dfIndex:#,row in self.peakData.iterrows():
+                    self.samples = []
+                    for index in dfIndex:
+                        for samp in samples:
                             if abs(samp["center m/z"]-self.peakData.at[index,"mz"])/self.peakData.at[index,"mz"]*1e6 < self.massAcc:
                                 if samp["rt"] >= self.peakData.at[index,"rt_start"] and samp["rt"] <= self.peakData.at[index,"rt_end"]:
-                                    samp["group"] = index
-                                    goodSamps.append(i)
-                                    break
-                    self.samples = [self.samples[x] for x in goodSamps]
+                                    newSamp = list(samp)
+                                    newSamp["group"] = index
+                                    self.samples.append(newSamp)
                     numGroups = len(set([samp["group"] for samp in self.samples]))
                     print("Number of compounds with acquired MS2: ",numGroups)
                     print("Number of spectra to deconvolve: ",len(self.samples))
@@ -1000,8 +948,7 @@ class DecoID():
             unknownThreshold = dpThresh
             unknownPPMThreshold = ppmThresh
             for result, centerMz, id, rt, s2n, indices, numComponents, fragments, decoSpec,components in data2Write:
-                if not any(result[x][0] >= unknownThreshold and ((result[x][4] - x[3]) * (10 ** 6)) / x[
-                    3] < unknownPPMThreshold for x in result):
+                if not any(result[x][0] >= unknownThreshold and ((float(result[x][4]) - float(x[2])) * 1e6) / float(x[2]) < unknownPPMThreshold for x in result):
                     unknownGroupIDs.append(id)
 
             unknownSamples = []
@@ -1048,9 +995,7 @@ class DecoID():
 
 
         if type(self.samples) != type(-1):
-            self.paramSuffix = ""
-            for x in [self.useAuto, self.recursive, self.iso, self.peaks]:
-                self.paramSuffix += "_" + str(int(x))
+
             success = False
             error = True
             #check output file can be opened.
@@ -1065,7 +1010,7 @@ class DecoID():
                         time.sleep(2)
             #write header
             outfile.write(
-                "#scanID,isolation_center_m/z,rt,compound_m/z,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID\n")
+                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID\n")
             #start Q
             t = Thread(target=self.runQ, args=(
             q,outfile,threshold,self.outputDataFinal,self.filename + self.label + ".DecoID",
@@ -1097,7 +1042,7 @@ class DecoID():
         index = 0
         status = 0
         outputScanFile = open(scanInfoFileName, "w")
-        outputScanFile.write("#scanID,Signal to Noise Ratio,numComponents,componentID,componentAbundance,componentMz,rt,spectrum\n")
+        outputScanFile.write("#featureID,Signal to Noise Ratio,numComponents,componentID,componentRT,componentAbundance,componentMz,spectrum\n")
         toQuit = False
         delimiter = ","
         if self.DDA:
@@ -1127,7 +1072,7 @@ class DecoID():
                         fragments = [centerMz]
 
                     for c in components:
-                        outputScanFile.write(str(id) + "," + str(s2n) + "," + str(numComponents) + "," + str(c[0]) + "," +str(c[2]) + "," + str(c[1]) + "," + str(rt) + ",")
+                        outputScanFile.write(str(id) + "," + str(s2n) + "," + str(numComponents) + "," + str(c[0]) + "," +str(c[2]) + "," + str(c[3]) + "," + str(c[1]) + ",")
                         for ind,i in zip(indices,components[c]):
                             if i > 0:
                                 outputScanFile.write(str(indexRef[ind]) + ":" + str(i) + " ")
@@ -1145,23 +1090,18 @@ class DecoID():
                         update = True
                     for x in result:
                         if result[x][0] > threshold:
-
                             try:
                                 tempMz = result[x][4]
                             except:
                                 print(result[x])
                                 break
+
                             componentName = result[x][3]
                             outfile.write(str(id) + "," + str(tempMz))
+                            [outfile.write(delimiter + z) for z in
+                             [str(rt), str(x[2]),str(x[4]),str(x[5]), str(x[0]), str(x[3]), str(x[1]), str(result[x][0]),
+                              str((float(x[2]) - float(tempMz)) * 1e6 / float(tempMz)), str(x[6]),str(componentName)]]
 
-                            try:
-                                [outfile.write(delimiter + z) for z in
-                                 [str(rt), str(x[3]), str(x[1]), x[0], str(x[2]), str(result[x][0]),
-                                  str((x[3] - tempMz) * 1e6 / tempMz), str(x[4]),str(componentName)]]
-                            except:
-                                [outfile.write(delimiter + z) for z in
-                                 [str(x[1]), str(x[2]), str(result[x][0]),
-                                  str((x[3] - tempMz) * 10 ** 6 / tempMz), str(x[4]),str(componentName)]]
                             outfile.write("\n")
                             if filename != "None" and update:
                                 outputDataFile[id]["Hits"][x] = result[x]
@@ -1312,13 +1252,13 @@ class DecoID():
 
     def processMzGroup(self,allSamples, clusters, numProcesses, upperBound, lowerBound, availableToGrab,lock,q,dbLock):
 
-        def startProc(numP, l,samples,trees,possCompounds,possIsotopes):
+        def startProc(numP, l,samples,trees):
             spectra = [samp["spectra"] for samp in samples]
             toAdd = {key: value for key, value in clusters.items() if
                      any(key[1] < samp["rt"] and key[2] > samp["rt"] for samp in samples)}
             p = Process(target=DecoID.processGroup,
                         args=(
-                            samples,group,trees, spectra, possCompounds, possIsotopes, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol))
+                            samples,group,trees, spectra, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol))
             #t = Thread(target=startProc, args=(p, numProcesses, lock))
             while not checkRoom(numProcesses, lock):
                 time.sleep(1)
@@ -1340,12 +1280,12 @@ class DecoID():
         mode = allSamples[0]["mode"]
         if self.useDBLock:
             with dbLock:
-                trees, possCompounds, possIsotopes = self.lib.getCanidateCompoundTrees(mode, upperBound, lowerBound, self.iso,
-                                                                          self.library,self.key)
+                trees = self.lib.getCanidateCompoundTrees(mode, upperBound, lowerBound, self.iso,
+                                                                          self.library,self.key,self.massAcc,self.resolution)
         else:
-            trees, possCompounds, possIsotopes = self.lib.getCanidateCompoundTrees(mode, upperBound, lowerBound,
+            trees = self.lib.getCanidateCompoundTrees(mode, upperBound, lowerBound,
                                                                                    self.iso,
-                                                                                   self.library, self.key,)
+                                                                                   self.library, self.key,self.massAcc,self.resolution)
         featureGroups = {x["group"]:[] for x in allSamples}
         [featureGroups[x["group"]].append(x) for x in allSamples]
 
@@ -1353,7 +1293,7 @@ class DecoID():
 
         threads = []
         for group,samples in featureGroups.items():
-            t = Thread(target=startProc,args=(numProcesses,lock,samples,trees,possCompounds,possIsotopes))
+            t = Thread(target=startProc,args=(numProcesses,lock,samples,trees))
             t.start()
             threads.append(t)
 
@@ -1361,13 +1301,9 @@ class DecoID():
             t.join()
 
     @staticmethod
-    def processGroup(samples,group,trees, spectra, possCompounds, possIsotopes, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol):
-
-        [metIDs, spectraTrees, spectraIDs, matrix, masses, metNames, indicesAll,
-         reduceSpec,rts] = getMatricesForGroup(trees, spectra, possCompounds, possIsotopes, iso,
-                                           # make get matrices for group independent of library source
-                                           resolution, toAdd)
-        isoIndices = [x for x in range(len(metIDs)) if type(metIDs[x]) == type(tuple())]
+    def processGroup(samples,group,trees, spectra, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol):
+        [metIDs, spectraIDs, matrix, masses, metNames, rts, formulas, indicesAll, reduceSpec] = getMatricesForGroup(trees, spectra,resolution, toAdd)
+        isoIndices = [x for x in range(len(metIDs)) if "(M+1)" in metNames[x]]
 
         results = []
         samples2Go = list(samples)
@@ -1390,15 +1326,12 @@ class DecoID():
             else:
                 frags = []
 
-            scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs, spectraTrees,
-                                                    masses, centerMz, DDA, massAcc)
+            scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
+                                                    masses, centerMz,rts, massAcc,rtTol,rt)
 
-            result = {(met, specID, mass, name, safeDivide(comp, sum(resVector))): coeff for
-                      met, name, specID, coeff, mass, comp in
-                      zip(metIDs, metNames, spectraIDs, scores, masses, resVector)}
-
-            # combine isotopes together
-            result = cleanIsotopes(result)
+            result = {(met, specID, mass, name,r,formula, safeDivide(comp, sum(resVector))): coeff for
+                      met, name, specID, coeff, mass, comp,r,formula in
+                      zip(metIDs, metNames, spectraIDs, scores, masses, resVector,rts,formulas)}
 
             # output result
             success = False
@@ -1411,10 +1344,10 @@ class DecoID():
                     print("waiting to put in q")
                     pass
         else:
-            rts = [samp["rt"] for samp in samples]
+            rts1 = [samp["rt"] for samp in samples]
             for index,row in peakData.iterrows():
                 if row["mz"] >= lowerbound and row["mz"] <= upperbound:
-                    goodIndices = [x for x in range(len(rts)) if rts[x] >= row["rt_start"] and rts[x] <= row["rt_end"]]
+                    goodIndices = [x for x in range(len(rts1)) if rts1[x] >= row["rt_start"] and rts1[x] <= row["rt_end"]]
                     if len(goodIndices) > 0:
                         combinedSpectrum = np.sum([reduceSpec[x] for x in goodIndices], axis=0)
                         resVector = np.sum([results[x][0] for x in goodIndices], axis=0)
@@ -1429,15 +1362,12 @@ class DecoID():
                         else:
                             frags = []
 
-                        scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs, spectraTrees,
-                                                                masses, centerMz, DDA, massAcc)
+                        scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
+                                                                masses, centerMz, rts, massAcc, rtTol, rt)
 
-                        result = {(met, specID, mass, name, safeDivide(comp, sum(resVector))): coeff for
-                                  met, name, specID, coeff, mass, comp in
-                                  zip(metIDs, metNames, spectraIDs, scores, masses, resVector)}
-
-                        # combine isotopes together
-                        result = cleanIsotopes(result)
+                        result = {(met, specID, mass, name, r, formula, safeDivide(comp, sum(resVector))): coeff for
+                                  met, name, specID, coeff, mass, comp, r, formula in
+                                  zip(metIDs, metNames, spectraIDs, scores, masses, resVector, rts, formulas)}
 
                         # output result
                         success = False
@@ -1450,11 +1380,6 @@ class DecoID():
                             except:
                                 print("waiting to put in q")
                                 pass
-
-            #get peaks in window
-            #parse out by retention time where peaks occur
-            #repeat the above with the targeted m/z
-            #no peaks => no results
 
     @staticmethod
     def processSample(sample,spectrum,masses,matrix,massAcc,peaks,resPenalty,isoIndices,rts,rtTol):
@@ -1481,10 +1406,8 @@ class DecoID():
                 res = [0.0 for _ in masses]
                 s2n = 0.0
                 decoSpec = [0 for _ in spectrum]
-            #q.put([res,s2n,decoSpec])
             return [res,s2n,decoSpec]
         else:
-            #q.put([[],0,[0 for _ in spectrum]])
             return [[],0,[0 for _ in spectrum]]
 
     @staticmethod
@@ -1520,62 +1443,36 @@ class DecoID():
                     outfile.close()
 
 
-import requests
-import json
-if getattr(sys, 'frozen', False):
-    application_path = sys._MEIPASS
-    MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-        "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                        "rb"))}
-elif __file__:
-
-    application_path = os.path.dirname(__file__)
-    MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-        "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                        "rb"))}
-
-timeout = 30
-CONCURRENTREQUESTMAX = 1
-MAXMASS = 5000
 
 class customDBpy():
     def __init__(self):
         pass
     @staticmethod
     def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library="none", key="none",
-                                 resolution=2):
+                                 ppmError=5,res=2):
 
-        possCompounds = set()
-        possIsotopes = set()
-
+        possIsotopes = {}
         # get compounds in isolation window
         possCompounds = {
-            (library[mode][x]["cpdID"], library[mode][x]["cpdID"],
+            (library[mode][x]["cpdID"],
              library[mode][x]["m/z"],library[mode][x]["name"],
              library[mode][x]["rt"],library[mode][x]["formula"],
-             library[mode][x]["id"]):library[mode][x]["spectrum"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound and library[mode][x]["m/z"] <= upperBound}
+             library[mode][x]["id"]):library[mode][x]["spec"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound and library[mode][x]["m/z"] <= upperBound}
 
 
         # get isotopes if necessary
         if isotope:
-            possIsotopes = {(library[mode][x]["cpdID"], library[mode][x]["cpdID"],
-                             library[mode][x]["m/z"] + 1.003, library[mode][x]["name"] + " (M+1)",
+            possIsotopes = {(library[mode][x]["cpdID"] + " (M+1)",
+                             library[mode][x]["m/z"] + 1.00335, library[mode][x]["name"] + " (M+1)",
                              library[mode][x]["rt"],library[mode][x]["formula"],
-                             library[mode][x]["id"]):library[mode][x]["spectrum"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound - 1.00335 and library[mode][x]["m/z"] <= lowerBound}
+                             library[mode][x]["id"]):createM1SpectrumfromM0(library[mode][x]["spec"],library[mode][x]["formula"],mode,ppmError) for x in library[mode] if library[mode][x]["m/z"] >= lowerBound - 1.00335 and library[mode][x]["m/z"] <= lowerBound}
 
+        possCompounds.update(possIsotopes)
+        trees = {key[:-1]:{} for key,val in possCompounds.items()}
+        for x in possCompounds:
+            trees[x[:-1]][x[-1]] = collapseAsNeeded(possCompounds[x],res)
 
-        trees = {x[:-1]: library[mode][x[-1]]["spectrum"] for x in possIsotopes.union(possCompounds)}
-        uniqueCPDs = list(set([tuple(x[:-1]) for x in trees]))
-        trees2 = {c: {} for c in uniqueCPDs}
-        for x in trees:
-            trees2[tuple(x[:-1])][x[-1]] = trees[x]
-        possCompounds = {key[:-2] for key in possCompounds}
-        possIsotopes = {key[:-2] for key in possIsotopes}
-        return trees2, possCompounds, possIsotopes
+        return trees
 
 class Keys():
     def __init__(self,api_code):
@@ -1590,50 +1487,65 @@ class mzCloudPy():
     def __init__(self):
         pass
     @staticmethod
-    def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library=["reference"], key="none"):
+    def getCanidateCompoundTrees(mode, upperBound, lowerBound, isotope=False, library="reference", key="none",ppmError=5,res=2):
 
         keys = Keys(key)
         # make list of isolation window range
-        centerMz = [lowerBound, upperBound]
-        possCompounds = set()
         possIsotopes = set()
-        for lib in library:
+        possCompounds = set()
+
             # get compounds in isolation window
+        possCompounds = possCompounds.union(set([tuple(x) for x in MZCOMPOUNDTREELINK[library][mode] if
+                             float(x[5]) >= lowerBound and float(x[5]) <= upperBound]))
 
-            possCompoundsTemp = [(lib[0] + str(x[0]), x[1], possCompoundsTemp[x], x[2]) for x in possCompoundsTemp if
-                                 possCompoundsTemp[x] >= lowerBound and possCompoundsTemp[x] <= upperBound]
+        # get isotopes if necessary
+        if isotope:
+            possIsotopes = possIsotopes.union(set([tuple(x) for x in MZCOMPOUNDTREELINK[library][mode] if
+             float(x[5]) >= lowerBound - 1.00335 and float(x[5]) <= lowerBound]))
 
-            possCompounds = possCompounds.union({tuple(x) for x in possCompoundsTemp})
+        possCompounds = possCompounds.union(possIsotopes)
+        trees = mzCloudPy.getTrees(possCompounds, keys,library=library)
+        possIsotopes = list(possIsotopes)
+        returnDict = {}
+        cpds = []
+        for tree in trees:
+            if tree in possIsotopes:
+                name = tree[2] + " (M+1)"
+                mz = tree[5] + 1.00335
+                id = library[0] + str(tree[1]) + " (M+1)"
+            else:
+                name = tree[2]
+                mz = tree[5]
+                id = library[0] + str(tree[1])
+            if id not in cpds:
+                cpds.append(id)
+                returnDict[(id,mz,name,tree[4],tree[3])] = {}
+            for specID in trees[tree]:
+                if tree in possIsotopes:
+                    spec = createM1SpectrumfromM0(trees[tree][specID],tree[3],mode,ppmError)
+                else:
+                    spec = trees[tree][specID]
+                returnDict[(id,mz,name,tree[4],tree[3])][specID] = collapseAsNeeded(spec,res)
 
-            # get isotopes if necessary
-            if isotope:
-                possIsotopesTemp = {tuple(x[:2]) + (x[3],): x[2] for x in flatten(
-                    [MZCOMPOUNDTREELINK[lib][mode][x] for x in range(centerMz[0] - 1, centerMz[1])])}
-                possIsotopesTemp = [(lib[0] + str(x[0]), x[1], possIsotopesTemp[x], x[2]) for x in possIsotopesTemp if
-                                    possIsotopesTemp[x] >= lowerBound - 1.00335 and possIsotopesTemp[x] <= lowerBound]
 
-                possIsotopes = possIsotopes.union({tuple(x) for x in
-                                                   possIsotopesTemp})  # if x[2] >= centerMzOrig - isolationWidth - 1 and x[2] <= centerMzOrig - isolationWidth}
-
-        trees = mzCloudPy.getTrees(possIsotopes.union(possCompounds), keys)
-
-        return trees, possCompounds, possIsotopes
+        return returnDict
 
     """
     take spectra from m/z cloud after being read in by json and convert to dictionary
     """
     @staticmethod
     def convertSpectra2Vector(spectra):
-        mzs = {x["MZ"]:0 for x in spectra["Peaks"]}
+        mz = spectra['IsolationWidth']["XPos"]
+        spectrum = {x["MZ"]:0 for x in spectra["Peaks"]}
         for x in spectra["Peaks"]:
-            mzs[x["MZ"]] += x["Abundance"]
-        return mzs
+            spectrum[x["MZ"]] += x["Abundance"]
+        return spectrum,mz
 
     @staticmethod
     def getTrees(trees, keys, calibration="recalibrated",library="reference"):
         output = {}
         for tree in trees:
-            url = keys.SPECTRAURL.replace("TREENUMBER", str(tree[1]))
+            url = keys.SPECTRAURL.replace("TREENUMBER", str(tree[0]))
             url = url.replace("LIBRARY", library)
             querystring = {"stage": "2", "processing": calibration, "peaks": "true"}
             payload = ""
@@ -1645,8 +1557,14 @@ class mzCloudPy():
                             None) or "An error has occurred" in response.text or "Service Unavailable" in response.text or "unavailable" in response.text:
                         response = 1
                     else:
-                        output[tree] = mzCloudPy.getAllSpectraInTree(
+                        specTree = mzCloudPy.getAllSpectraInTree(
                             mzCloudPy.reformatSpectraDictList(json.loads(response.text)))
+                        specTreeClean = {}
+                        for spec in specTree:
+                            if 1e6 * abs(specTree[spec][1]-tree[5])/tree[5] < 100:
+                                specTreeClean[spec] = specTree[spec][0]
+                        if len(specTreeClean) > 0:
+                            output[tree] = specTreeClean
                 except:
                    pass
 
@@ -1709,8 +1627,10 @@ class mzCloudPy():
                     polarity = treeDict[tree]["Polarity"]
                     if polarity == "Positive":
                         mz = tree[-1] + 1.0073
-                    else:
+                    elif polarity == "Negative":
                         mz = tree[-1] - 1.0073
+                    else:
+                        print("Error",polarity)
                     tree = tuple(list(tree[:-1]) + [mz])
                     linkage[polarity].append(tree)
                 except:
