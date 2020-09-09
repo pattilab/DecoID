@@ -91,14 +91,19 @@ class Radiobar(Frame):
 def browseForFile(filename,types):
     filename.set(filedialog.askopenfilename(filetypes=types))
 
-def performSearch(filename,numCores,recursive,iso,peaks,dtype,massAcc,custOrMzCloud,libFile,searchMethod,filenamePeak,offset,useRT,rtTol,key):
+def performSearch(filename,numCores,recursive,iso,peaks,dtype,massAcc,custOrMzCloud,libFile,searchMethod,filenamePeak,offset,useRT,rtTol,key,fragInt):
     file = filename.get()
     libraryFile = libFile.get()
     peakFile = filenamePeak.get()
     if peakFile == "No File Selected":
         peakFile = ""
 
-    apikey = open(key.get()).readline().rstrip()
+    fragIntThresh = float(fragInt.get())
+
+    try:
+        apikey = open(key.get()).readline().rstrip()
+    except:
+        apikey = "none"
 
     db = DATABASESELCTION[custOrMzCloud.state()]
     if db != "custom":
@@ -139,11 +144,11 @@ def performSearch(filename,numCores,recursive,iso,peaks,dtype,massAcc,custOrMzCl
     fragThresh = 0#scaleFragment.get()
 
 
-    thr = threading.Thread(target=createWaitingBox,args=(file,threshold,fragThresh,numCores.get(),mzCloudLib,useRec,useIso,usePeaks,DDA,MA,libraryFile,doDeco,peakFile,offset,rtTolerance,apikey))
+    thr = threading.Thread(target=createWaitingBox,args=(file,threshold,fragThresh,numCores.get(),mzCloudLib,useRec,useIso,usePeaks,DDA,MA,libraryFile,doDeco,peakFile,offset,rtTolerance,apikey,fragIntThresh))
     thr.start()
 
 
-def createWaitingBox(file,threshold,fragThresh,numCores,mzcloudLib,useRec,useIso,usePeaks,DDA,massAcc,libFile,doDeco,peakFile,offset,rtTolerance,key):
+def createWaitingBox(file,threshold,fragThresh,numCores,mzcloudLib,useRec,useIso,usePeaks,DDA,massAcc,libFile,doDeco,peakFile,offset,rtTolerance,key,fragIntThresh):
     def cancelSearch(proc,var,top):
         proc.kill()
         var.set("Search Canceled")
@@ -162,7 +167,7 @@ def createWaitingBox(file,threshold,fragThresh,numCores,mzcloudLib,useRec,useIso
     numCores = int(numCores)
     def runDeco():
         decID = DecoID(libFile, mzcloudLib, numCores,api_key=key)
-        decID.readData(file ,2,usePeaks,DDA,massAcc,peakDefinitions=peakFile,offset=offset)
+        decID.readData(file ,2,usePeaks,DDA,massAcc,peakDefinitions=peakFile,offset=offset,frag_cutoff=fragIntThresh)
 
         if doDeco:
             if DDA: lam = 1
@@ -309,12 +314,12 @@ def visualizeResultsStart(self,filename,scoreThresh,ppmThresh,usePPM,scanNumber,
     thr.start()
 
 def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumber, DDA):
-        name = filename.get()
-        ending = name.split(".")[-1]
-        name = name.replace("." + ending,".DecoID")
+    name = filename.get()
+    ending = name.split(".")[-1]
+    name = name.replace("." + ending,".DecoID")
 
 
-    #try:
+    try:
         [samples,peakData,ms1,results] = pkl.load(gzip.open(name,"rb"))
         #peaks = bool(int(prefix.split("_")[-1]))
         #samples,ms1 = readRawDataFile('"' + filename.get() + '"', maxMass=3000, resolution=[2], useMS1=peaks)
@@ -396,9 +401,9 @@ def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumb
         displayButton.pack()
 
 
-    # except:
-    #     top = Toplevel()
-    #     Label(top, text="Datafile does not exist for selected file, please run the search first", font=LARGE_FONT).pack()
+    except:
+        top = Toplevel()
+        Label(top, text="Datafile does not exist for selected file, please run the search first", font=LARGE_FONT).pack()
 
 
 def displayHitsForCluster(cluster,results,feature,filename,ppmThresh,scoreThresh,DDA,ms1,isoBounds):
@@ -471,9 +476,8 @@ def displayHit(result,feature,cluster,filename,ms1Deco,isoBounds):
         tempSpec[i] = m
     decoSpec = tempSpec.tolist()
     plotSpectra(0, maxMass=MAXMASS, res=0.01, spectras=spec2Display, specificPlot=a1,
-                title="DP = " + str(np.round(sample[-6],2)) + "   PPM Error = " + str(np.round(((10**6)*(float(sample[2]) - float(sample[6]))/float(sample[2])),2)),
-                labels=["Component: " + sample[-3],sample[7]])
-
+                title="DP = " + str(np.round(sample[-7],2)) + "   PPM Error = " + str(np.round(((10**6)*(float(sample[2]) - float(sample[6]))/float(sample[2])),2)) + "    Redundant: " + str(sample[-1]),
+                labels=["Component: " + sample[-4],sample[7]])
     spec = np.zeros(MAXMASS*10**resolution).tolist()
     for key,val in cluster["spectrum"].items():
         spec[int((10**resolution)*np.round(key,resolution))] += val
@@ -656,7 +660,29 @@ class StartPage(Frame):
         scaleAcc.grid(row=0,column=1,pady=10, padx=10)
         massAccFrame.grid(row=9,column=0)
 
-        Label(LeftTop,text="Isolation Window Width (Da, required for non-thermo data)").grid(row=10,column=0)
+        fragIntFrame = Frame(LeftTop)
+        Label(fragIntFrame,text="Fragment Intensity Threshold").grid(row=0,column=0,pady=10)
+        fragInt = StringVar()
+        fragInt.set("0")
+        Label(fragIntFrame,textvariable = fragInt).grid(row=0,column=1,pady=10,padx=10)
+
+        def val3(input):
+            if input == "": return True
+            try:
+                t = float(input)
+                fragInt.set(str(t))
+                return True
+            except:
+                fragInt.set("")
+                return False
+
+        e = Entry(fragIntFrame, width=3, textvariable=fragInt, validate="key",
+                  vcmd=(fragIntFrame.register(val3), ('%P',)))
+        e.grid(row=0, column=2, pady=10, padx=10)
+
+        fragIntFrame.grid(row=10,column=0)
+
+        Label(LeftTop,text="Isolation Window Width (Da, required for non-thermo data)").grid(row=11,column=0)
         isoWindowFrame = Frame(LeftTop)
         isoWindow = StringVar()
         isoWindow.set("1")
@@ -676,7 +702,7 @@ class StartPage(Frame):
         e = Entry(isoWindowFrame, width=3, textvariable=isoWindow, validate="key",
                   vcmd=(isoWindowFrame.register(val3), ('%P',)))
         e.grid(row=0, column=2, pady=10, padx=10)
-        isoWindowFrame.grid(row=11, column=0)
+        isoWindowFrame.grid(row=12, column=0)
 
 
         RightTop = LeftTop#Frame(parent,width=1000,height=1000,pady=3,padx=3,bd=1)#,bg="white")
@@ -733,7 +759,7 @@ class StartPage(Frame):
                                                                            ("All Files", "*")]))
         browsePeakFileButton.grid(row=11, column=3, pady=10)
         runSearchButton = ttk.Button(LeftTop, text="Search",
-                                     command=lambda: performSearch(filename,numCores,recursive,iso,peaks,dtype,scaleAcc,custOrMzCloud,libraryFile,standardOrDeco,filenamePeak,float(isoWindow.get())/2,useRT,rtTol,mzCloudAPIFile))
+                                     command=lambda: performSearch(filename,numCores,recursive,iso,peaks,dtype,scaleAcc,custOrMzCloud,libraryFile,standardOrDeco,filenamePeak,float(isoWindow.get())/2,useRT,rtTol,mzCloudAPIFile,fragInt))
         runSearchButton.grid(row=12,column = 3,pady
         =10, padx=10)
 

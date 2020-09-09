@@ -17,6 +17,6 @@ rtTol = float("inf")
 if __name__ == '__main__':
     #multiprocessing.set_start_method("spawn")
     decID = DecoID(libFile, mzCloudLib, numCores,api_key=key)
-    decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions="../exampleData/peak_table.csv")
+    decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions="../exampleData/peak_table.csv",frag_cutoff=1000)
     decID.identifyUnknowns(rtTol=rtTol)
     decID.searchSpectra("y", lam , fragThresh, useIso, threshold,rtTol=rtTol)

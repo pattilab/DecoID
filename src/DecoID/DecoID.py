@@ -171,7 +171,7 @@ def flatten(l):
 
 
 
-def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt):
+def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt,redundancyCheckThresh):
 
     """Goal is to take deconvolved aspects of the spectra"""
     numComponents = len([x for x in range(len(res)) if res[x] > 0])
@@ -224,12 +224,28 @@ def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, r
     if len([x for x in res if x > 0]) > 1:
         allComponents[("residual",centerMz,rt,0.0)] = [max([d,0.0]) for d in differences]
 
-    for x in range(len(res)):
-        for comp,mz,r,ab in components:
+    redundantComponent = []
+    for comp,mz,r,ab in components:
+        componentScores = []
+        componentThresh = -1
+        for x in range(len(res)):
             if abs(centerMz-masses[x])/masses[x]*1e6 < massAcc and (rts[x] < 0 or abs(rts[x]-rt) < rtTol):
                 dp = 100*dotProductSpectra(matrix[x],components[(comp,mz,r,ab)])
                 if dp > resScores[x][0]:
-                    resScores[x] = [dp,components[(comp,mz,r,ab)],matrix[x],comp,centerMz,rt]
+                    resScores[x] = [dp,components[(comp,mz,r,ab)],matrix[x],comp,centerMz,rt,False]
+                if metIDs[x] == comp:
+                    componentThresh = redundancyCheckThresh * dp
+                componentScores.append(dp)
+        if len([x for x in componentScores if x > componentThresh]) > 1:
+            redundantComponent.append(comp)
+
+    for x in range(len(resScores)):
+        if resScores[x][3] in redundantComponent:
+            resScores[x][-1] = True
+
+
+
+
     return resScores,allComponents
 
 def safeDivide(num,denom):
@@ -299,10 +315,6 @@ def createM1SpectrumfromM0(spectra,formula,polarity,ppmError = 5):
         if len(mPlus1) > 0:
             maxVal = np.max(list(mPlus1.values()))
             mPlus1 = {key: val / maxVal for key, val in mPlus1.items()}
-        else:
-            print("bad")
-            print(formula, bounds, molmass.Formula(formula).isotope.mass,maxMass)
-            print(spectra)
     else:
         mPlus1 = {}
 
@@ -479,7 +491,7 @@ def takeClosest(myList, myNumber):
        return before
 
 
-def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=0.65,tic_cutoff=5):
+def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=0.65,tic_cutoff=5,frag_cutoff=0):
    """
     Read MS datafile and convert to mzml if necessary. Conversion performs vendor centroiding. MS/MS data along with MS1
     data are extracted and returned. In addition, the contamination in the MS/MS spectra from co-isolated analytes is
@@ -539,8 +551,10 @@ def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=
                         mzs = list(zip(temp["m/z array"],temp["intensity array"]))
                         tempSpecs = []
 
-                        spectra ={np.round(x[0],resolution):0 for x in mzs}
-                        for x,y in mzs: spectra[np.round(x,resolution)] += y
+                        spectra = {np.round(x[0],resolution):0 for x in mzs}
+                        for x,y in mzs:
+                            if y > frag_cutoff:
+                                spectra[np.round(x,resolution)] += y
 
                         result.append({"id":id,"spectra":spectra,"mode":acquisitionMode,"center m/z":
                                            centerMz,"lower m/z":lowerBound,"higher m/z":upperBound,"rt":rt,"signal":tic})
@@ -760,7 +774,7 @@ class DecoID():
         :return: None
         """
         #read in data
-        samples, ms1 = readRawDataFile(filename, MAXMASS, resolution, peaks,offset=offset,tic_cutoff=tic_cutoff,ppmWidth=massAcc)
+        samples, ms1 = readRawDataFile(filename, MAXMASS, resolution, peaks,offset=offset,tic_cutoff=tic_cutoff,ppmWidth=massAcc,frag_cutoff=frag_cutoff)
         if samples != -1:
             #set object fields
             self.samples = samples
@@ -797,7 +811,7 @@ class DecoID():
                         for samp in samples:
                             if abs(samp["center m/z"]-self.peakData.at[index,"mz"])/self.peakData.at[index,"mz"]*1e6 < self.massAcc:
                                 if samp["rt"] >= self.peakData.at[index,"rt_start"] and samp["rt"] <= self.peakData.at[index,"rt_end"]:
-                                    newSamp = list(samp)
+                                    newSamp = dict(samp)
                                     newSamp["group"] = index
                                     self.samples.append(newSamp)
                     numGroups = len(set([samp["group"] for samp in self.samples]))
@@ -916,6 +930,7 @@ class DecoID():
         self.percentPeaks = percentPeaks
         self.rtTol = rtTol
         self.resPenalty = resPenalty
+        self.redundancyCheckThresh = np.inf
 
         #check datatype
         q = Queue(maxsize=1000)
@@ -964,7 +979,7 @@ class DecoID():
 
 
 
-    def searchSpectra(self,verbose,resPenalty = 100,percentPeaks=0.01,iso=False,threshold = 0.0,rtTol=.5):
+    def searchSpectra(self,verbose,resPenalty = 100,percentPeaks=0.01,iso=False,threshold = 0.0,rtTol=.5,redundancyCheckThresh = 0.9):
         """
         Search the spectra loaded into the DecoID object and write the output files
 
@@ -973,6 +988,8 @@ class DecoID():
         :param percentPeaks: float, filtering parameter, exclude spectra that do not match this fraction of the database peaks
         :param iso: bool, remove contamination from orphan isotopologues if True, False- do not.
         :param threshold: float filtering parameter to remove hits with a spectral similarity less than this value
+        :param rtTol: float, retention time tolerance to use database spectra (minutes)
+        :param redundancyCheckThresh: float, dot product threshold to classify a component as redundant set to > 100 to turn off
         :return: None
         """
         try: self.samples
@@ -982,6 +999,7 @@ class DecoID():
         self.iso = iso
         self.percentPeaks = percentPeaks
         self.rtTol = rtTol
+        self.redundancyCheckThresh = redundancyCheckThresh
 
         self.resPenalty = resPenalty
         if len(self.ms1) < 1:
@@ -1010,7 +1028,7 @@ class DecoID():
                         time.sleep(2)
             #write header
             outfile.write(
-                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID\n")
+                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID,redundant\n")
             #start Q
             t = Thread(target=self.runQ, args=(
             q,outfile,threshold,self.outputDataFinal,self.filename + self.label + ".DecoID",
@@ -1100,7 +1118,7 @@ class DecoID():
                             outfile.write(str(id) + "," + str(tempMz))
                             [outfile.write(delimiter + z) for z in
                              [str(rt), str(x[2]),str(x[4]),str(x[5]), str(x[0]), str(x[3]), str(x[1]), str(result[x][0]),
-                              str((float(x[2]) - float(tempMz)) * 1e6 / float(tempMz)), str(x[6]),str(componentName)]]
+                              str((float(x[2]) - float(tempMz)) * 1e6 / float(tempMz)), str(x[6]),str(componentName),str(result[x][6])]]
 
                             outfile.write("\n")
                             if filename != "None" and update:
@@ -1258,7 +1276,7 @@ class DecoID():
                      any(key[1] < samp["rt"] and key[2] > samp["rt"] for samp in samples)}
             p = Process(target=DecoID.processGroup,
                         args=(
-                            samples,group,trees, spectra, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol))
+                            samples,group,trees, spectra, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol,self.redundancyCheckThresh))
             #t = Thread(target=startProc, args=(p, numProcesses, lock))
             while not checkRoom(numProcesses, lock):
                 time.sleep(1)
@@ -1301,7 +1319,7 @@ class DecoID():
             t.join()
 
     @staticmethod
-    def processGroup(samples,group,trees, spectra, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol):
+    def processGroup(samples,group,trees, spectra, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol,redundancyCheckThresh):
         [metIDs, spectraIDs, matrix, masses, metNames, rts, formulas, indicesAll, reduceSpec] = getMatricesForGroup(trees, spectra,resolution, toAdd)
         isoIndices = [x for x in range(len(metIDs)) if "(M+1)" in metNames[x]]
 
@@ -1327,7 +1345,7 @@ class DecoID():
                 frags = []
 
             scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
-                                                    masses, centerMz,rts, massAcc,rtTol,rt)
+                                                    masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh)
 
             result = {(met, specID, mass, name,r,formula, safeDivide(comp, sum(resVector))): coeff for
                       met, name, specID, coeff, mass, comp,r,formula in
@@ -1468,9 +1486,17 @@ class customDBpy():
                              library[mode][x]["id"]):createM1SpectrumfromM0(library[mode][x]["spec"],library[mode][x]["formula"],mode,ppmError) for x in library[mode] if library[mode][x]["m/z"] >= lowerBound - 1.00335 and library[mode][x]["m/z"] <= lowerBound}
 
         possCompounds.update(possIsotopes)
-        trees = {key[:-1]:{} for key,val in possCompounds.items()}
+        cpds = []
+        trees = {}
         for x in possCompounds:
-            trees[x[:-1]][x[-1]] = collapseAsNeeded(possCompounds[x],res)
+            if x[0] not in cpds:
+                cpds.append(x[0])
+                trees[x[:-1]] = {}
+                id = x[:-1]
+            else:
+                id = [t for t in trees if t[0] == x[0]][0]
+
+            trees[id][x[-1]] = collapseAsNeeded(possCompounds[x],res)
 
         return trees
 
