@@ -1,5 +1,7 @@
 from DecoID.DecoID import DecoID
 libFile = "../databases/mzCloud_reference.db"
+libFile = "../databases/MoNA-export-LC-MS-MS_Spectra.db"
+
 key = open("../housekeeping/mzCloud_api_key.txt").readline().rstrip()
 mzCloudLib = "reference"
 numCores = 10#int(sys.argv[2])

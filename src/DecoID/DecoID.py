@@ -227,7 +227,7 @@ def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, r
     redundantComponent = []
     for comp,mz,r,ab in components:
         componentScores = []
-        componentThresh = -1
+        componentThresh = np.inf
         for x in range(len(res)):
             if abs(centerMz-masses[x])/masses[x]*1e6 < massAcc and (rts[x] < 0 or abs(rts[x]-rt) < rtTol):
                 dp = 100*dotProductSpectra(matrix[x],components[(comp,mz,r,ab)])
