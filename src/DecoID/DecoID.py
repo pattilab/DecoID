@@ -667,7 +667,7 @@ class DecoID():
                                     if cpdid == -1:
                                         cpdid = name
                                     if id != -1 and len(spectrum) > 0:
-                                        self.library[polarity][id] = {"id":id,"cpdID":cpdid,"rt":rt,"formula":formula,"name":replaceAllCommas(name),"mode":polarity,"spec":spectrum,"m/z":np.round(mz,4)}
+                                        self.library[polarity][id] = {"id":id,"cpdID":str(cpdid).replace(",","_"),"rt":rt,"formula":formula.replace(",","_"),"name":replaceAllCommas(name),"mode":polarity,"spec":spectrum,"m/z":np.round(mz,4)}
                                         good = True
 
 
@@ -1019,7 +1019,7 @@ class DecoID():
             #check output file can be opened.
             while (not success):
                 try:
-                    outfile = open(self.filename+ self.label + "_decoID" + ".csv", "w")
+                    outfile = open(self.filename+ self.label + "_decoID" + ".csv", "w",encoding="utf-8")
                     success = True
                 except:
                     if error:
@@ -1059,7 +1059,7 @@ class DecoID():
              verbose="y"):
         index = 0
         status = 0
-        outputScanFile = open(scanInfoFileName, "w")
+        outputScanFile = open(scanInfoFileName, "w",encoding="utf-8")
         outputScanFile.write("#featureID,Signal to Noise Ratio,numComponents,componentID,componentRT,componentAbundance,componentMz,spectrum\n")
         toQuit = False
         delimiter = ","
