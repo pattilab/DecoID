@@ -3,7 +3,6 @@ from DecoID import DecoID
 import multiprocessing
 
 filename = sys.argv[2]
-useAuto = False
 numCores = int(sys.argv[3])
 peakFile = sys.argv[4]
 
@@ -17,12 +16,14 @@ threshold = 0
 lam = float(sys.argv[8])
 unknowns = bool(int(sys.argv[9]))
 libFile = sys.argv[1]
+lab = sys.argv[11]
+frag_cutoff = float(sys.argv[12])
+rtTol = float(sys.argv[13])
 
 if __name__ == '__main__':
     multiprocessing.set_start_method("spawn")
-    decID = DecoID.DecoID(libFile, useAuto, numCores, label=str(lam) + "_")
-
-    decID.readData(filename, 2, usePeaks, DDA, massAcc,offset,peakDefinitions=peakFile)
+    decID = DecoID.DecoID(libFile,"none",numCores,2,label="_"+lab+"_"+str(lam) + "_")
+    decID.readData(filename,2,usePeaks,DDA,massAcc,offset,peakDefinitions=peakFile,frag_cutoff=frag_cutoff)
     if unknowns:
-        decID.identifyUnknowns()
-    decID.searchSpectra("y", lam , fragThresh, useIso, threshold)
+        decID.identifyUnknowns(lam,iso=useIso,rtTol=rtTol)
+    decID.searchSpectra("y",lam,iso=useIso,threshold=threshold,rtTol=rtTol)

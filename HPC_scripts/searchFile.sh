@@ -4,8 +4,6 @@
 #PBS -q old
 #PBS -N searchFile
 
-cd /home/Estancliffe/decoID/HPC_scripts/
-
 export PATH=/export/Anaconda3-5.2.0/bin:$PATH
 source activate py3
 
@@ -19,5 +17,9 @@ iso=$6
 unk=$7
 lam=$8
 ma=$9
+lab=${10}
+frag_cutoff=${11}
+rtTol=${12}
 
-python searchFile.py $db $dataDir 8 $peakfile $ms1 $dda $iso $lam $unk $ma
+
+python /home/Estancliffe/DecoID/searchFile.py $db $dataDir 8 $peakfile $ms1 $dda $iso $lam $unk $ma $lab $frag_cutoff $rtTol
