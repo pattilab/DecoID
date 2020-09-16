@@ -1434,7 +1434,7 @@ class DecoID():
                             frags = []
 
                         scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
-                                                                masses, centerMz, rts, massAcc, rtTol, rt)
+                                                                masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh)
 
                         result = {(met, specID, mass, name, r, formula, safeDivide(comp, sum(resVector))): coeff for
                                   met, name, specID, coeff, mass, comp, r, formula in

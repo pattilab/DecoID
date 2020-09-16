@@ -25,4 +25,3 @@ if __name__ == '__main__':
     decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions="../exampleData/peak_table.csv",frag_cutoff=1000)
     decID.identifyUnknowns(rtTol=rtTol)
     decID.searchSpectra("y", lam , fragThresh, useIso, threshold,rtTol=rtTol,)
-decID.searchSpectra()

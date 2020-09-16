@@ -1,5 +1,5 @@
 import sys
-from DecoID import DecoID
+import DecoID
 import multiprocessing
 
 filename = sys.argv[2]
