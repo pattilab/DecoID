@@ -175,7 +175,7 @@ def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, r
 
     """Goal is to take deconvolved aspects of the spectra"""
     numComponents = len([x for x in range(len(res)) if res[x] > 0])
-    resScores = [[0,[0 for _ in originalSpectra],[0 for _ in originalSpectra],"original",masses[x],rts[x]] for x in range(len(res))]
+    resScores = [[0,[0 for _ in originalSpectra],[0 for _ in originalSpectra],"original",masses[x],rts[x],False] for x in range(len(res))]
     if len(matrix) > 0:
         solvedSpectraTotal = np.dot(np.transpose(matrix),res)
         differences =  np.subtract(flatten(originalSpectra),flatten(solvedSpectraTotal))/numComponents
@@ -260,61 +260,76 @@ def splitList(l, n):
     n = int(np.ceil(len(l)/float(n)))
     return list([l[i:i + n] for i in range(0, len(l), n)])
 
+
+def getSubForms(formula,polarity):
+    f = molmass.Formula(formula)  # create formula object
+    comp = f.composition()
+    masses = []
+    bounds = []
+    carbon_pos = -1
+    i = 0
+    for row in comp:
+        tmp = molmass.Formula(row[0])
+        massC = tmp.isotope.mass
+        masses.append(massC)
+        if row[0] == "C":
+            carbon_pos = i
+        if row[0] == "H":
+            if polarity == "Positive":
+                bounds.append(int(row[1] + 1))
+            else:
+                bounds.append(int(row[1] - 1))
+        else:
+            bounds.append(int(row[1]))
+        i += 1
+
+    masses = np.array(masses)
+    bounds = np.array(bounds)
+
+    subs_lists = [list(range(int(b + 1))) for b in bounds]
+    sub_forms = list(itertools.product(*subs_lists))
+
+    return masses,sub_forms,carbon_pos,bounds
+
+def createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,ppmError):
+
+    spectra = {str(x): val for x, val in spectra.items()}
+    frags = [x for x in spectra.keys()]
+    intens = [spectra[x] for x in frags]
+
+    subsForFrags = {f: [] for f in frags}
+    maxMass = -1
+    for s in sub_forms:
+        mass = np.dot(s, masses.transpose())
+        if mass > maxMass:
+            maxMass = mass
+        for f in frags:
+            if 1e6 * np.abs(mass - float(f)) / float(f) < ppmError:
+                subsForFrags[f].append(list(s))
+    subsForFrags = {key: np.array(val) for key, val in subsForFrags.items()}
+
+    mPlus1 = {}
+    for f, i in zip(frags, range(len(frags))):
+        if len(subsForFrags[f]) > 0:
+            prob_c13_in_frag = np.mean(subsForFrags[f][:, carbon_pos]) / bounds[carbon_pos]
+            mPlus1[float(f)] = intens[i] * (1 - prob_c13_in_frag)
+            mz = float(f) + 1.003
+            mPlus1[mz] = intens[i] * prob_c13_in_frag
+    if len(mPlus1) > 0:
+        maxVal = np.max(list(mPlus1.values()))
+        mPlus1 = {key: val / maxVal for key, val in mPlus1.items()}
+
+    return mPlus1
+
+
 def createM1SpectrumfromM0(spectra,formula,polarity,ppmError = 5):
 
     if len(spectra) > 0:
-        f = molmass.Formula(formula)  # create formula object
-        comp = f.composition()
-        masses = []
-        bounds = []
-        carbon_pos = -1
-        i = 0
-        for row in comp:
-            tmp = molmass.Formula(row[0])
-            massC = tmp.isotope.mass
-            masses.append(massC)
-            if row[0] == "C":
-                carbon_pos = i
-            if row[0] == "H":
-                if polarity == "Positive":
-                    bounds.append(int(row[1]+1))
-                else:
-                    bounds.append(int(row[1]-1))
-            else:
-                bounds.append(int(row[1]))
-            i += 1
-
-
-        masses = np.array(masses)
-        bounds = np.array(bounds)
-        spectra = {str(x):val for x,val in spectra.items()}
-        frags = [x for x in spectra.keys()]
-        intens = [spectra[x] for x in frags]
-
-        subs_lists = [list(range(int(b + 1))) for b in bounds]
-        sub_forms = list(itertools.product(*subs_lists))
-
-        subsForFrags = {f: [] for f in frags}
-        maxMass = -1
-        for s in sub_forms:
-            mass = np.dot(s, masses.transpose())
-            if mass > maxMass:
-                maxMass = mass
-            for f in frags:
-                if 1e6 * np.abs(mass - float(f)) / float(f) < ppmError:
-                    subsForFrags[f].append(list(s))
-        subsForFrags = {key: np.array(val) for key, val in subsForFrags.items()}
-
-        mPlus1 = {}
-        for f, i in zip(frags, range(len(frags))):
-            if len(subsForFrags[f]) > 0:
-                prob_c13_in_frag = np.mean(subsForFrags[f][:, carbon_pos]) / bounds[carbon_pos]
-                mPlus1[float(f)] = intens[i] * (1 - prob_c13_in_frag)
-                mz = float(f) + 1.003
-                mPlus1[mz] = intens[i] * prob_c13_in_frag
-        if len(mPlus1) > 0:
-            maxVal = np.max(list(mPlus1.values()))
-            mPlus1 = {key: val / maxVal for key, val in mPlus1.items()}
+        try:
+            masses, sub_forms, carbon_pos, bounds = getSubForms(formula,polarity)
+            mPlus1 = createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,ppmError)
+        except:
+            mPlus1 = {}
     else:
         mPlus1 = {}
 
@@ -617,6 +632,15 @@ def createDictFromString(string, resolution):
     return specDict
 
 
+def createM1Entry(m0Entry, mode, qu,ppm):
+    key = m0Entry["id"] + "_M1"
+    val = dict(m0Entry)
+    val["cpdID"] = val["cpdID"] + " (M+1)"
+    val["m/z"] = val["m/z"] + 1.00335
+    val["name"] = val["name"] + " (M+1)"
+    val["id"] = val["id"] + "_M1"
+    val["spec"] = createM1SpectrumfromM0(m0Entry["spec"], m0Entry["formula"], mode, ppm)
+    qu.put([key, val, mode])
 
 class DecoID():
     """
@@ -631,15 +655,15 @@ class DecoID():
     :param label: str, optional label to add to the end of output files
     :param api_key: str, for use of mzCloud api, access key must be entered
     """
-    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none"):
+    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15):
 
         self.libFile = libFile
         self.useDBLock = False
         #read tsv library file
-
+        self.mplus1PPM = mplus1PPM
         #for msp library files
         if ".msp" in libFile:
-            try:
+            #try:
                 mz = -1
                 id = -1
                 cpdid = -1
@@ -667,7 +691,7 @@ class DecoID():
                                     if cpdid == -1:
                                         cpdid = name
                                     if id != -1 and len(spectrum) > 0:
-                                        self.library[polarity][id] = {"id":id,"cpdID":str(cpdid).replace(",","_"),"rt":rt,"formula":formula.replace(",","_"),"name":replaceAllCommas(name),"mode":polarity,"spec":spectrum,"m/z":np.round(mz,4)}
+                                        self.library[polarity][id] = {"id":str(id),"cpdID":str(cpdid).replace(",","_"),"rt":rt,"formula":formula.replace(",","_"),"name":replaceAllCommas(name),"mode":polarity,"spec":spectrum,"m/z":np.round(mz,4)}
                                         good = True
 
 
@@ -712,14 +736,43 @@ class DecoID():
                     if "Num Peaks" in line:
                         looking = True
                 print("Library loaded successfully: " + str(len(self.library["Positive"]) + len(self.library["Negative"])) + " spectra found")
+                print("Predicting M+1 now...")
+                q = Queue()
+
+                processes = []
+                toIts = {p:list(self.library[p].keys()) for p in self.library}
+                for pol in toIts:
+                    for key in toIts[pol]:
+                        entry = self.library[pol][key]
+                        p = Process(target=createM1Entry,args=(entry,pol,q,self.mplus1PPM))
+                        while len(processes) >= numCores:
+                            if not q.empty():
+                                k,v,m = q.get()
+                                if len(v) > 0:
+                                    self.library[m][k] = v
+                            processes = [x for x in processes if x.is_alive()]
+                        p.start()
+                        processes.append(p)
+                while len(processes) > 0:
+                    if not q.empty():
+                        k, v, m = q.get()
+                        if len(v) > 0:
+                            self.library[m][k] = v
+                    processes = [x for x in processes if x.is_alive()]
+                while not q.empty():
+                    k, v, m = q.get()
+                    if len(v) > 0:
+                        self.library[m][k] = v
                 pkl.dump(self.library,open(libFile.replace(".msp",".db"),"wb"))
-            except:
-               print(sys.exc_info())
-               print("bad library file: ", libFile)
-               return -1
-            self.lib = customDBpy
-            self.cachedReq = "none"
-            self.ms_ms_library = "custom"
+
+                self.lib = customDBpy
+                self.cachedReq = "none"
+                self.ms_ms_library = "custom"
+            # except:
+            #    print(sys.exc_info())
+            #    print("bad library file: ", libFile)
+            #    return -1
+
         #for binrary datbabase files
         elif ".db" in libFile:
             self.lib = customDBpy
@@ -1278,7 +1331,7 @@ class DecoID():
                         args=(
                             samples,group,trees, spectra, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol,self.redundancyCheckThresh))
             #t = Thread(target=startProc, args=(p, numProcesses, lock))
-            while not checkRoom(numProcesses, lock):
+            while not checkRoom(numP, l):
                 time.sleep(1)
             p.start()
             p.join()
@@ -1475,15 +1528,15 @@ class customDBpy():
             (library[mode][x]["cpdID"],
              library[mode][x]["m/z"],library[mode][x]["name"],
              library[mode][x]["rt"],library[mode][x]["formula"],
-             library[mode][x]["id"]):library[mode][x]["spec"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound and library[mode][x]["m/z"] <= upperBound}
+             library[mode][x]["id"]):library[mode][x]["spec"] for x in library[mode] if library[mode][x]["m/z"] >= lowerBound and library[mode][x]["m/z"] <= upperBound and "(M+1)" not in library[mode][x]["name"]}
 
 
         # get isotopes if necessary
         if isotope:
-            possIsotopes = {(library[mode][x]["cpdID"] + " (M+1)",
-                             library[mode][x]["m/z"] + 1.00335, library[mode][x]["name"] + " (M+1)",
+            possIsotopes = {(library[mode][x]["cpdID"],
+                             library[mode][x]["m/z"], library[mode][x]["name"],
                              library[mode][x]["rt"],library[mode][x]["formula"],
-                             library[mode][x]["id"]):createM1SpectrumfromM0(library[mode][x]["spec"],library[mode][x]["formula"],mode,ppmError) for x in library[mode] if library[mode][x]["m/z"] >= lowerBound - 1.00335 and library[mode][x]["m/z"] <= lowerBound}
+                             library[mode][x]["id"]):library[mode][x]["spec"] for x in library[mode] if library[mode][x]["m/z"]-1.0035 >= lowerBound - 1.00335 and library[mode][x]["m/z"]-1.0035 <= lowerBound and "(M+1)" in library[mode][x]["name"]}
 
         possCompounds.update(possIsotopes)
         cpds = []
@@ -1546,9 +1599,12 @@ class mzCloudPy():
             if id not in cpds:
                 cpds.append(id)
                 returnDict[(id,mz,name,tree[4],tree[3])] = {}
+
+            if tree in possIsotopes:
+                masses, sub_forms, carbon_pos, bounds = getSubForms(tree[3],mode)
             for specID in trees[tree]:
                 if tree in possIsotopes:
-                    spec = createM1SpectrumfromM0(trees[tree][specID],tree[3],mode,ppmError)
+                    spec = createM1FromM0andFragAnnotation(trees[tree][specID],masses,sub_forms,carbon_pos,bounds,ppmError)
                 else:
                     spec = trees[tree][specID]
                 returnDict[(id,mz,name,tree[4],tree[3])][specID] = collapseAsNeeded(spec,res)

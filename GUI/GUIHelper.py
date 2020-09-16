@@ -413,7 +413,7 @@ def displayHitsForCluster(cluster,results,feature,filename,ppmThresh,scoreThresh
     ms1Deco = {}
     for id in relevant:
         comps = relevant[id]["components"]
-        ms1Deco[id] = [[c[1],c[2]] for c in comps]
+        ms1Deco[id] = [[c[1],c[3]] for c in comps]
         ms1OI = [val for key,val in ms1.items() if key > cluster["rtWindow"][0] and key < cluster["rtWindow"][1]]
         if len(ms1OI) > 0:
             ms1Spec = {key:val for key,val in ms1OI[0].items() if key > isoBounds[0] and key < isoBounds[1]}
