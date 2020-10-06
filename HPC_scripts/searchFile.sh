@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#PBS -l nodes=1:ppn=8,walltime=2:00:00
+#PBS -l nodes=1:ppn=8,walltime=4:00:00
 #PBS -q old
 #PBS -N searchFile
 

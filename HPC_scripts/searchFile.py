@@ -22,8 +22,8 @@ rtTol = float(sys.argv[13])
 
 if __name__ == '__main__':
     multiprocessing.set_start_method("spawn")
-    decID = DecoID.DecoID(libFile,"none",numCores,2,label="_"+lab+"_"+str(lam) + "_")
+    decID = DecoID.DecoID(libFile,"none",numCores,2,label="_"+lab+"_"+str(lam))
     decID.readData(filename,2,usePeaks,DDA,massAcc,offset,peakDefinitions=peakFile,frag_cutoff=frag_cutoff)
     if unknowns:
-        decID.identifyUnknowns(lam,iso=useIso,rtTol=rtTol)
+        decID.identifyUnknowns(lam,iso=useIso,rtTol=rtTol,ppmThresh=50)
     decID.searchSpectra("y",lam,iso=useIso,threshold=threshold,rtTol=rtTol)

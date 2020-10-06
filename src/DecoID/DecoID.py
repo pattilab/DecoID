@@ -655,8 +655,8 @@ class DecoID():
     :param label: str, optional label to add to the end of output files
     :param api_key: str, for use of mzCloud api, access key must be entered
     """
-    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15):
-
+    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15,numConcurrentGroups=20):
+        self.numConcurrentMzGroups = numConcurrentGroups
         self.libFile = libFile
         self.useDBLock = False
         #read tsv library file
@@ -867,6 +867,7 @@ class DecoID():
                                     newSamp = dict(samp)
                                     newSamp["group"] = index
                                     self.samples.append(newSamp)
+
                     numGroups = len(set([samp["group"] for samp in self.samples]))
                     print("Number of compounds with acquired MS2: ",numGroups)
                     print("Number of spectra to deconvolve: ",len(self.samples))
@@ -914,6 +915,55 @@ class DecoID():
                 signal = row["Area"]
                 samples.append({"id": id, "spectra": spectra, "mode": mode, "center m/z":
                     centerMz, "lower m/z": lowerBound, "higher m/z": upperBound, "rt": rt, "signal": signal})
+
+        self.ms1 = {}
+        self.massAcc = massAcc
+        self.DDA = DDA
+
+        # samples = samples[:100]
+        fileending = "." + file.split(".")[-1]
+        self.filename = file.replace(fileending, "")
+        self.filename = self.filename.replace('"', "")
+        self.clusters = {}
+        self.data2WriteFinal = []
+        self.outputDataFinal = {}
+
+        goodSamps = []
+        for samp in samples:
+            i += 1
+            for index, row in self.peakData.iterrows():
+                if abs(samp["center m/z"] - row["mz"]) / row["mz"] * 1e6 < massAcc and samp["rt"] >= row[
+                    "rt_start"] and samp["rt"] <= row["rt_end"]:
+                    samp["group"] = index
+                    goodSamps.append(i)
+                    break
+        self.samples = [samples[x] for x in goodSamps]
+        print(len(self.samples), " MS2 spectra detected")
+
+    def readDecoMS2_data(self, file, mode, massAcc, peakDataFile):
+        self.resolution = 2
+        self.peaks = False
+        DDA = True
+        self.peakData = pd.read_csv(
+            peakDataFile)
+        self.peakData = self.peakData[["mz", "rt_start", "rt_end"]]
+        i = -1
+        sampleData = pd.read_csv(file)
+        samples = []
+
+        for index, row in sampleData.iterrows():
+            id = row["index"]
+            spectra = row["spectrum"].split()
+            spectra = [x.split(":") for x in spectra]
+            spectra = {float(mz): float(i) for mz, i in spectra if float(i) > 0}
+            spectra = collapseAsNeeded(spectra, self.resolution)
+            centerMz = row["mz"]
+            upperBound = centerMz + .1
+            lowerBound = centerMz - .1
+            rt = (row["rt_start"]+row["rt_end"])/2
+            signal = 1e6
+            samples.append({"id": id, "spectra": spectra, "mode": mode, "center m/z":
+                centerMz, "lower m/z": lowerBound, "higher m/z": upperBound, "rt": rt, "signal": signal})
 
         self.ms1 = {}
         self.massAcc = massAcc
@@ -1016,8 +1066,12 @@ class DecoID():
             unknownThreshold = dpThresh
             unknownPPMThreshold = ppmThresh
             for result, centerMz, id, rt, s2n, indices, numComponents, fragments, decoSpec,components in data2Write:
-                if not any(result[x][0] >= unknownThreshold and ((float(result[x][4]) - float(x[2])) * 1e6) / float(x[2]) < unknownPPMThreshold for x in result):
-                    unknownGroupIDs.append(id)
+                if numComponents < 4:
+                    if len(result) > 0:
+                        if not any(result[x][0] >= unknownThreshold and (abs(float(result[x][4]) - float(x[2])) * 1e6) / float(x[2]) < unknownPPMThreshold for x in result):
+                            unknownGroupIDs.append(id)
+                    else:
+                        unknownGroupIDs.append(id)
 
             unknownSamples = []
             for id in unknownGroupIDs:
@@ -1281,8 +1335,8 @@ class DecoID():
                 #     pkl.dump([samples,ms1,peakData,baseDict],fh)
         else:
             print("no files detected")
-    def runSamples(self,samples,q,numConcurrentMzGroups=20):
-
+    def runSamples(self,samples,q):
+        numConcurrentMzGroups = self.numConcurrentMzGroups
         numProcesses = Value('i', 0)
         lock = Lock()
         processes = []
