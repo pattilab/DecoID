@@ -1293,6 +1293,40 @@ class DecoID():
             DecoID.writeObj(tempObject,tempObject.filename+".dill") #write file
 
     @staticmethod
+    def combineResultsAutoAnotate(filenames,newFilename,numHits = 1):
+        """
+        Combine results from several files. Takes the best hit found across multiple files
+
+        :param filenames: filenames to merge
+        :param newFilename: output file name
+        :return: None
+        """
+        bestResults = pd.read_csv(filenames[0]+"_decoID.csv")
+        feats = list(set(bestResults["#featureID"].values))
+        for f in filenames[1:]:
+            data = pd.read_csv(f+"_decoID.csv")
+            found_feats = list(set(data["#featureID"].values))
+            for feat in found_feats:
+                part = data[data["#featureID"] == feat]
+                if feat not in feats:
+                    bestResults = pd.concat((bestResults,part),axis=1)
+                    feats.append(feat)
+                else:
+                    tmp = bestResults[bestResults["#featureID"] == feat]
+                    for index,row in part.iterrows():
+                        if row["cpdID"] in tmp["cpdID"].values:
+                            score = [[i,r["dot_product"]] for i,r in tmp.iterrows() if r["cpdID"] == row["cpdID"]][0]
+                            if row["dot_product"] > score[1]:
+                                bestResults.loc[score[0],:] = row
+
+
+
+
+
+
+
+
+    @staticmethod
     def combineResults(filenames,newFilename,endings = ["_scanInfo.csv","_decoID.csv",".DecoID"]):
         """
         Combine results from several files. Helpful to merge results from lots of files. Does only the .csv files for memory reasons.
