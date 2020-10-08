@@ -21,9 +21,12 @@ scipy (v1.4.1)
 
 pyteomics (v4.2)
 
-grequests (v0.4.0)
+requests (v2.22.0)
 
 lxml (v4.5.0)
+
+molmass (2020.6.10)
+
 
 
 In order to process vendor formatted data without manual conversion, MS-Convert (http://proteowizard.sourceforge.net/tools.shtml) needs to be installed and added to PATH. 
