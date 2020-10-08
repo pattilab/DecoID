@@ -732,7 +732,8 @@ class DecoID():
                         elif temp == "N":
                             polarity = "Negative"
                     if looking and len(line.split()) == 2:
-                        spectrum[float(line.split()[0])] = float(line.split()[1])
+                        if float(line.split()[1]) > 0:
+                            spectrum[float(line.split()[0])] = float(line.split()[1])
                     if "Num Peaks" in line:
                         looking = True
                 print("Library loaded successfully: " + str(len(self.library["Positive"]) + len(self.library["Negative"])) + " spectra found")

@@ -25,5 +25,5 @@ if __name__ == '__main__':
     decID = DecoID.DecoID(libFile,"none",numCores,2,label="_"+lab+"_"+str(lam))
     decID.readData(filename,2,usePeaks,DDA,massAcc,offset,peakDefinitions=peakFile,frag_cutoff=frag_cutoff)
     if unknowns:
-        decID.identifyUnknowns(lam,iso=useIso,rtTol=rtTol,ppmThresh=50)
+        decID.identifyUnknowns(lam,iso=useIso,rtTol=rtTol,dpThresh=80)
     decID.searchSpectra("y",lam,iso=useIso,threshold=threshold,rtTol=rtTol)
