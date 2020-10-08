@@ -21,7 +21,7 @@ scipy (v1.4.1)
 
 pyteomics (v4.2)
 
-grequests (v0.4.0)
+requests (v0.4.0)
 
 lxml (v4.5.0)
 

@@ -4,5 +4,6 @@ sklearn
 numpy
 scipy
 pyteomics
-grequests
+requests
 lxml
+molmass
