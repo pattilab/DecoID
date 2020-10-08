@@ -2,13 +2,13 @@ from DecoID.DecoID import DecoID
 #libFile = "../databases/mzCloud_autoprocessing.db"
 #libFile = "../databases/MoNA-export-LC-MS-MS_Spectra.db"
 #libFile = "../databases/IROA_updated_NCE40.db"
-#libFile = "../databases/HMDB_experimental.db"
-libFile = "none"
+libFile = "../databases/HMDB_experimental.db"
+#libFile = "none"
 
-key = open("../housekeeping/mzCloud_api_key.txt").readline().rstrip()
+key = "none"#open("../housekeeping/mzCloud_api_key.txt").readline().rstrip()
 mzCloudLib = "reference"
-numCores = 40#int(sys.argv[2])
-file = "../exampleData/Asp-40uM_Mal1uM_1Da_NCE30_750ms_NCE50.mzML"#sys.argv[1]
+numCores = 4#int(sys.argv[2])
+file = "../exampleData/Asp-Mal_1uM_5Da.mzML"#sys.argv[1]
 
 usePeaks = True
 DDA = True#False
@@ -23,5 +23,5 @@ if __name__ == '__main__':
     #multiprocessing.set_start_method("spawn")
     decID = DecoID(libFile, mzCloudLib, numCores,api_key=key)
     decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions="../exampleData/peak_table.csv",frag_cutoff=1000)
-    decID.identifyUnknowns(rtTol=rtTol)
+    decID.identifyUnknowns(iso=useIso,rtTol=rtTol,ppmThresh=80)
     decID.searchSpectra("y", lam , fragThresh, useIso, threshold,rtTol=rtTol,)
