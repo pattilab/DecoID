@@ -20,7 +20,7 @@ import itertools
 import uuid
 import numpy as np
 np.seterr(divide='ignore', invalid='ignore')
-
+from copy import deepcopy
 import requests
 import json
 if getattr(sys, 'frozen', False):
@@ -1293,8 +1293,9 @@ class DecoID():
             tempObject.samples = [samp for samp in tempObject.samples if samp["group"] in group]
             DecoID.writeObj(tempObject,tempObject.filename+".dill") #write file
 
+
     @staticmethod
-    def combineResultsAutoAnotate(filenames,newFilename,numHits = 1):
+    def combineResultsAutoAnnotate(filenames, newFilename, numHits=1,min_score=0):
         """
         Combine results from several files. Takes the best hit found across multiple files
 
@@ -1302,30 +1303,50 @@ class DecoID():
         :param newFilename: output file name
         :return: None
         """
-        bestResults = pd.read_csv(filenames[0]+"_decoID.csv")
+        bestResults = pd.read_csv(filenames[0] + "_decoID.csv")
+        bestResults = bestResults[bestResults["DB_Spectrum_ID"] != "-1"]
+        bestResults = bestResults[bestResults["DB_Spectrum_ID"] != -1]
+        bestResults = bestResults[bestResults["dot_product"] > min_score]
+        bestResults["Origin File"] = [filenames[0] for x in range(len(bestResults))]
+
         feats = list(set(bestResults["#featureID"].values))
         for f in filenames[1:]:
-            data = pd.read_csv(f+"_decoID.csv")
+            data = pd.read_csv(f + "_decoID.csv")
+            data = data[data["DB_Spectrum_ID"] != "-1"]
+            data = data[data["DB_Spectrum_ID"] != -1]
+            data = data[data["dot_product"] > min_score]
+            data["Origin File"] = [f for x in range(len(data))]
+
             found_feats = list(set(data["#featureID"].values))
             for feat in found_feats:
                 part = data[data["#featureID"] == feat]
                 if feat not in feats:
-                    bestResults = pd.concat((bestResults,part),axis=1)
+                    bestResults = pd.concat((bestResults, part), axis=0, ignore_index=True)
                     feats.append(feat)
                 else:
                     tmp = bestResults[bestResults["#featureID"] == feat]
-                    for index,row in part.iterrows():
-                        if row["cpdID"] in tmp["cpdID"].values:
-                            score = [[i,r["dot_product"]] for i,r in tmp.iterrows() if r["cpdID"] == row["cpdID"]][0]
+                    toAdd = []
+                    for index, row in part.iterrows():
+                        if row["DB_Compound_ID"] in tmp["DB_Compound_ID"].values:
+                            score = [[i, r["dot_product"]] for i, r in tmp.iterrows() if
+                                     r["DB_Compound_ID"] == row["DB_Compound_ID"]][0]
                             if row["dot_product"] > score[1]:
-                                bestResults.loc[score[0],:] = row
+                                bestResults.loc[score[0], :] = row
+                        else:
+                            toAdd.append(index)
+                    if len(toAdd) > 0:
+                        bestResults = pd.concat((bestResults,part.loc[toAdd,:]),axis=0,ignore_index=True)
 
+        toDrop = []
+        for feat in feats:
+            tmp = bestResults[bestResults["#featureID"] == feat]
+            tmp = tmp.sort_values(by="dot_product", ascending=False)
+            if len(tmp) > numHits:
+                toDrop += list(tmp.index.values[numHits:])
 
-
-
-
-
-
+        bestResults = bestResults.drop(toDrop)
+        bestResults = bestResults.sort_values(by="#featureID", axis=0)
+        bestResults.to_csv(newFilename + "_decoID.csv", index=False)
 
     @staticmethod
     def combineResults(filenames,newFilename,endings = ["_scanInfo.csv","_decoID.csv",".DecoID"]):
@@ -1354,20 +1375,6 @@ class DecoID():
                         outfile = open(newFilename+end,"w")
                         [outfile.write(x) for x in base]
                         outfile.close()
-                # else:
-                #     print(end)
-                #     fh = gzip.open(goodFiles[0]+end, "rb")
-                #     [samples,ms1,peakData,baseDict] = pkl.load(fh)
-                #     fh.close()
-                #     if len(goodFiles) > 1:
-                #         for f in goodFiles[1:]:
-                #             fh = gzip.open(f + end, "rb")
-                #             [samp,_,_,tempDict] = pkl.load(fh)
-                #             baseDict.update(tempDict)
-                #             samples += samp
-                #             fh.close()
-                #     fh = gzip.open(newFilename+end,"wb")
-                #     pkl.dump([samples,ms1,peakData,baseDict],fh)
         else:
             print("no files detected")
     def runSamples(self,samples,q):
@@ -1459,6 +1466,8 @@ class DecoID():
 
         for t in threads:
             t.join()
+
+
 
     @staticmethod
     def processGroup(samples,group,trees, spectra, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol,redundancyCheckThresh):
