@@ -1206,6 +1206,7 @@ class DecoID():
                     update = False
                     if id not in outputDataFile:
                         outputDataFile[id] = {}
+                        outputDataFile[id]["NumCand"] = len(result)
                         outputDataFile[id]["decoSpec"] = decoSpec
                         outputDataFile[id]["center m/z"] = centerMz
                         outputDataFile[id]["rt"] = rt

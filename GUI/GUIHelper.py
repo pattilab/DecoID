@@ -517,12 +517,12 @@ def appendAnnotation(sample,cluster,filename):
 
     if not os.path.isfile(filename):
         file = open(filename,"w")
-        file.write("#scanID,isolation_center_m/z,rt,compound_m/z,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,PPMError\n")
+        file.write("#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error\n")
     else:
         file = open(filename,"a")
-    toWrite = [cluster["group"],cluster["m/z"],
-               "[" + str(np.round(min(cluster["rtWindow"]), 2)) + "-" + str(np.round(max(cluster["rtWindow"]), 2)) + "]",
-               str(sample[7]),sample[5],sample[4],sample[6],sample[11],np.round(((10**6)*(cluster["m/z"]-sample[7]))/cluster["m/z"],2)]
+
+    toWrite = [cluster["group"],cluster["m/z"],sample[1],sample[6],sample[8],sample[9],sample[4],
+               sample[7],sample[5],sample[13],1e6*abs(float(cluster["m/z"]) - float(sample[6]))/float(cluster["m/z"])]
     file.write(str(toWrite[0]))
     [file.write(","+str(x)) for x in toWrite[1:]]
     file.write("\n")
