@@ -307,6 +307,11 @@ def visualizeResultsStart(self,filename,scoreThresh,ppmThresh,usePPM,scanNumber,
     top = Toplevel()
     if PPMFILTER[usePPM]:
         ppmThresh = np.inf
+
+    if PPMFILTER[DDA]:
+        DDA = False
+    else:
+        DDA = True
     Label(top, text="Clustering...", font=LARGE_FONT).pack()
 
     thr = threading.Thread(target=visualizeResults,
@@ -317,7 +322,6 @@ def visualizeResults(self, filename, oldFrame, scoreThresh, ppmThresh, groupNumb
     name = filename.get()
     ending = name.split(".")[-1]
     name = name.replace("." + ending,".DecoID")
-
 
     try:
         [samples,peakData,ms1,results] = pkl.load(gzip.open(name,"rb"))
@@ -487,7 +491,6 @@ def displayHit(result,feature,cluster,filename,ms1Deco,isoBounds):
     ms1Spec = np.zeros(MAXMASS * 10 ** resolution).tolist()
     for m,i in ms1.items():
         ms1Spec[int((10 ** resolution) * np.round(m, resolution))] += i
-
     decoMs1Spec = np.zeros(MAXMASS * 10 ** resolution).tolist()
     for m,i in ms1Deco[sample[0]]:
         decoMs1Spec[int((10 ** resolution) * np.round(m, resolution))] += i
@@ -741,7 +744,7 @@ class StartPage(Frame):
         filename.set("No File Selected")
         Label(LeftTop, textvariable=filename).grid(row=7,column=3,pady=10)
         browseFileButton = ttk.Button(LeftTop, text="Select File",
-                                      command=lambda: browseForFile(filename,types=[("mzML",".mzML"),("Thermo", "*.raw"),("Agilent","*.d"),("All Files","*")]))
+                                      command=lambda: browseForFile(filename,types=[("mzML",".mzML"),("Thermo", "*.raw"),("Agilent","*.d"),("DecoID (visualization only)","*.DecoID"),("All Files","*")]))
         browseFileButton.grid(row=8,column=3,pady=10)
 
         lab = Label(RightTop, text="Select Peak Information File", font=LARGE_FONT)
@@ -832,7 +835,7 @@ class StartPage(Frame):
 
 
         visualizeResultsButton = ttk.Button(RightTop, text="Display Search Results",
-                                            command=lambda: visualizeResultsStart(self,filename,scale.get(),scalePPM.get(),PPMThreshold.state(),scanNumber2.get(),recursive,iso,peaks,dtype))
+                                            command=lambda: visualizeResultsStart(self,filename,scale.get(),scalePPM.get(),PPMThreshold.state(),scanNumber2.get(),recursive,iso,peaks,dtype.state()))
         visualizeResultsButton.grid(row=5,column=6,pady=10, padx=10)
 
         writeResultsButton = ttk.Button(RightTop, text="Write Filtered Results",
