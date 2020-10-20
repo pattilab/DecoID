@@ -309,9 +309,12 @@ def createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,p
     subsForFrags = {key: np.array(val) for key, val in subsForFrags.items()}
 
     mPlus1 = {}
+    unique = True
     for f, i in zip(frags, range(len(frags))):
         if len(subsForFrags[f]) > 0:
             prob_c13_in_frag = np.mean(subsForFrags[f][:, carbon_pos]) / bounds[carbon_pos]
+            if len(subsForFrags[f]) > 1:
+                unique = False
             mPlus1[float(f)] = intens[i] * (1 - prob_c13_in_frag)
             mz = float(f) + 1.003
             mPlus1[mz] = intens[i] * prob_c13_in_frag
@@ -319,7 +322,7 @@ def createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,p
         maxVal = np.max(list(mPlus1.values()))
         mPlus1 = {key: val / maxVal for key, val in mPlus1.items()}
 
-    return mPlus1
+    return mPlus1,unique
 
 
 def createM1SpectrumfromM0(spectra,formula,polarity,ppmError = 5):
@@ -327,13 +330,13 @@ def createM1SpectrumfromM0(spectra,formula,polarity,ppmError = 5):
     if len(spectra) > 0:
         try:
             masses, sub_forms, carbon_pos, bounds = getSubForms(formula,polarity)
-            mPlus1 = createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,ppmError)
+            mPlus1,unique = createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,ppmError)
         except:
             mPlus1 = {}
     else:
         mPlus1 = {}
 
-    return mPlus1#,{key:val[:,carbon_pos] for key,val in subsForFrags.items() if len(val) > 0}
+    return mPlus1,unique#,{key:val[:,carbon_pos] for key,val in subsForFrags.items() if len(val) > 0}
 
 def collapse1Fold(spec):
     inc = 10
@@ -639,7 +642,7 @@ def createM1Entry(m0Entry, mode, qu,ppm):
     val["m/z"] = val["m/z"] + 1.00335
     val["name"] = val["name"] + " (M+1)"
     val["id"] = val["id"] + "_M1"
-    val["spec"] = createM1SpectrumfromM0(m0Entry["spec"], m0Entry["formula"], mode, ppm)
+    val["spec"],_ = createM1SpectrumfromM0(m0Entry["spec"], m0Entry["formula"], mode, ppm)
     qu.put([key, val, mode])
 
 class DecoID():

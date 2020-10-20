@@ -42,7 +42,7 @@ def processCompoundGroup(cpd,spectraForCompounds,pol,q):
         val["cpdID"] = cpdID
         val["name"] = name
         val["m/z"] = val["m/z"] + 1.00335
-        val["spec"] = createM1FromM0andFragAnnotation(val["spec"],masses,sub_forms,carbon_pos,bounds,mPlusOnePPM)
+        val["spec"],_ = createM1FromM0andFragAnnotation(val["spec"],masses,sub_forms,carbon_pos,bounds,mPlusOnePPM)
         q.put([key,val,pol])
 
 library = "reference"
