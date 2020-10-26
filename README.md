@@ -5,7 +5,7 @@ Metabolomics software for database-assisted deconvolution of MS/MS spectra
 
 Standalone executible was built for Windows 10 64 bit
 
-Package has been tested with Python 3.7
+Package has been tested with Python 3.7 on Windows 10 and macOS Catalina 
 
 Package has the following dependencies:
 
@@ -27,6 +27,8 @@ lxml (v4.5.0)
 
 molmass (2020.6.10)
 
+Memory usage can be very intensive when searching DIA data or MS/MS spectra acquired with wide isolation windows (>10 m/z). This may limit the number of parallel processes
+that can be run. If memory errors occur, reduce this value. 
 
 
 In order to process vendor formatted data without manual conversion, MS-Convert (http://proteowizard.sourceforge.net/tools.shtml) needs to be installed and added to PATH. 
@@ -71,22 +73,49 @@ Example usage of deconvolution of DDA datafile (fast <5min):
 
 ```
 from DecoID.DecoID import DecoID
-libFile = "DecoID/databases/HMDB_experimental.db" #path to database
-numCores = 10 # # of parallel processes to use
-file = "DecoID/exampleData/Asp-Mal_1uM_5Da.mzML" #path to datafile
-peakfile = "DecoID/exampleData/peak_table.csv" #path to peak information file
 
-useMS1 = True #use MS1 data if avaible
-DDA = True #Data is DDA
-massAcc = 10 #Mass accuracy of instrument
-useIso = True #remove contamination from orphan isotopologues
-lam = 1 #LASSO regularizing coefficient (recommendation: 1 for DDA, 100 for DIA)
+#sets database to use
+libFile = "../databases/HMDB_experimental.db"
+
+#mzCloud key if necessary
+key = "none"
+mzCloudLib = "reference"
+
+#number of parallel processes to use
+numCores = 4
+
+#filename of query MS/MS data
+file = "../exampleData/Asp-Mal_1uM_5Da.mzML"
+
+#filename of peak list
+peakFile = "../exampleData/peak_table.csv"
+
+#set parameters
+usePeaks = True
+DDA = True #data is DDA
+massAcc = 10 #ppm tolerance
+fragThresh= 0.01 #require non-zero dot product threshold
+offset = .5 #half of isolation window width. Only for non-thermo data
+useIso = True #use predicted M+1 isotopolgoue spectra
+threshold = 0 #minimum dot product for reporting
+lam = 5.0 #LASSO parameter
+rtTol = float("inf") #retention time tolerance for database, inf means ignore RT
+fragCutoff = 1000 #intensity threshold for MS/MS peaks
+
 
 if __name__ == '__main__':
-    decID = DecoID(libFile,numCores) #create DecoID object
-    decID.readData(file, 2, useMS1, DDA, massAcc,peakDefinitions=peakfile) #load in datafile
-    decID.identifyUnknowns() #identify compounds for inclusion in on-the-fly unknown library
-    decID.searchSpectra("y", lam , iso = useIso) #deconvolve and identify spectra
+
+    #create DecoID object
+    decID = DecoID(libFile, mzCloudLib, numCores,api_key=key)
+
+    #read in data
+    decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions=peakFile,frag_cutoff=fragCutoff)
+
+    #identify unknowns compounds for on-the-fly unknown library
+    decID.identifyUnknowns(iso=useIso,rtTol=rtTol,dpThresh=80,resPenalty=lam)
+
+    #search spectra
+    decID.searchSpectra("y", lam , fragThresh, useIso, threshold,rtTol=rtTol)
 
 ```
 
@@ -94,21 +123,46 @@ Example usage on DIA MS/MS datafile (larger and slower, >20 min)
 
 ```
 from DecoID.DecoID import DecoID
-libFile = "DecoID/databases/HMDB_experimental.db" #path to database
-numCores = 10 # # of parallel processes to use
-file = "DecoID/exampleData/IROA_P1-6_DIA_test_pos1.mzML" #path to datafile
-peakfile = "DecoID/exampleData/IROA_p1-6_peak_table_pos_v3.csv" #path to peak information file
 
-useMS1 = True #use MS1 data if avaible
-DDA = False #Data is DIA
-massAcc = 10 #Mass accuracy of instrument
-useIso = False # do not remove contamination from orphan isotopologues (assume negligent for DIA)
-lam = 100 #LASSO regularizing coefficient (recommendation: 1 for DDA, 100 for DIA)
+#sets database to use
+libFile = "../databases/HMDB_experimental.db"
+
+#mzCloud key if necessary
+key = "none"
+mzCloudLib = "reference"
+
+#number of parallel processes to use
+numCores = 5
+
+#filename of query MS/MS data
+file = "../exampleData/IROA_P1-6_DIA_test_pos1.mzML"
+
+#filename of peak list
+peakFile = "../exampleData/IROA_p1-6_peak_table_pos_v3.csv"
+
+#set parameters
+usePeaks = True
+DDA = False #data is DIA
+massAcc = 10 #ppm tolerance
+fragThresh= 0.01 #require non-zero dot product threshold
+offset = .5 #half of isolation window width. Only for non-thermo data
+useIso = True #use predicted M+1 isotopolgoue spectra
+threshold = 0 #minimum dot product for reporting
+lam = 50.0 #LASSO parameter
+rtTol = float("inf") #retention time tolerance for database, inf means ignore RT
+fragCutoff = 1000 #intensity threshold for MS/MS peaks
 
 if __name__ == '__main__':
-    decID = DecoID(libFile,numCores) #create DecoID object
-    decID.readData(file, 2, useMS1, DDA, massAcc,peakDefinitions=peakfile) #load in datafile
-    decID.searchSpectra("y", lam , iso = useIso) #deconvolve and identify spectra
+
+    #create DecoID object
+    decID = DecoID(libFile, mzCloudLib, numCores,api_key=key)
+
+    #read in data
+    decID.readData(file, 2, usePeaks, DDA, massAcc,offset,peakDefinitions=peakFile,frag_cutoff=fragCutoff)
+
+    #search spectra
+    decID.searchSpectra("y", lam , fragThresh, useIso, threshold,rtTol=rtTol)
+
 ```
 
 expected output files are included in the exampleData directory
