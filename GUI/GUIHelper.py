@@ -170,8 +170,8 @@ def createWaitingBox(file,threshold,fragThresh,numCores,mzcloudLib,useRec,useIso
         decID.readData(file ,2,usePeaks,DDA,massAcc,peakDefinitions=peakFile,offset=offset,frag_cutoff=fragIntThresh)
 
         if doDeco:
-            if DDA: lam = 1
-            else: lam = 100
+            if DDA: lam = 5.0
+            else: lam = 50.0
             if useRec and DDA:
                 decID.identifyUnknowns(iso=useIso)
             decID.searchSpectra(q,lam,fragThresh,useIso,threshold,rtTol=rtTolerance)
