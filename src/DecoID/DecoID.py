@@ -894,7 +894,18 @@ class DecoID():
                     index += 1
                 self.peakData = pd.DataFrame.from_dict({i:{"mz":samp["center m/z"],"rt_start":samp["rt"]-.05,"rt_end":samp["rt"]+.05} for i,samp in zip(range(len(samples)),samples)},orient="index")
 
+
     def readMS_DIAL_data(self,file,mode,massAcc,peakDataFile):
+        """
+        Load in data from MS-DIAL exported peak list text file of deconvoluted spectra. This enables library searching and
+        combined usage of DecoID and MS-DIAL
+
+        :param file: str, path to MS-DIAL output file
+        :param mode: str, polarity (Positive/Negative)
+        :param massAcc: int, mass accuracy of instrument (ppm)
+        :param peakDataFile: str, path to peak information file for features of interest. If doing a combined usage, this needs to be the same file used for DecoID>
+        :return:
+        """
         self.resolution = 2
         self.peaks = False
         DDA = True
@@ -1019,7 +1030,7 @@ class DecoID():
             else:
                 time.sleep(1)
 
-    def identifyUnknowns(self,resPenalty=100,percentPeaks=0.01,iso=False,ppmThresh = 10,dpThresh = 20,rtTol=.5):
+    def identifyUnknowns(self,resPenalty=100,percentPeaks=0.01,iso=False,ppmThresh = 10,dpThresh = 80,rtTol=.5):
         """
         Generate the on-the-fly unknown library by searching all spectra first and identifying those that are unknown.
         These spectra can then be used to deconvolve other spectra. Only applicable to DDA with MS1 collected.
@@ -1029,6 +1040,7 @@ class DecoID():
         :param iso: bool, remove contamination from orphan isotopologues if True, False- do not.
         :param ppmThresh: float, mass error match tolerance for the resulting hits of the spectra.
         :param dpThresh: float, dot product match tolerance for the resulting hits of the spectra.
+        :param rtTol: float, retention time tolerance (minutes) allowed between database and acquired RT in order for database spectrum to be used in deconvolution
         :return: None
         """
         try: self.samples

@@ -123,38 +123,41 @@ After successful deconvolution of an MS/MS datafile, 3 output files are generate
 **<fn>_scanInfo.csv** gives the purified spectra and all components for each acquired MS/MS spectrum. It is formatted
 as shown below:
 
-======  =====================   =============   =========== ================== ============ ==== ==================================
-scanID  Signal to Noise Ratio   numComponents   componentID componentAbundance  ComponentMz rt   spectrum
-======  =====================   =============   =========== ================== ============ ==== ==================================
-1       2.5                     4               cpdID1      .8                 133.014      2.4  84:12.6 72:45
-1       2.5                     4               cpdID2      .2                 132.54       2.4  102:45 68:55
-1       2.5                     4               original    0                  133.014      2.4  68:55 72:45 84:12.6 102:45 72:55
-1       2.5                     4               residual    0                  133.014      2.4  72:10
-etc     etc                     etc             etc         etc                etc          etc  etc
-======  =====================   =============   =========== ================== ============ ==== ==================================
+=========  =====================   =============   =========== ================== =========== =========== ==================================
+featureID  Signal to Noise Ratio   numComponents   componentID componentAbundance componentRT componentMz spectrum
+=========  =====================   =============   =========== ================== =========== =========== ==================================
+1          2.5                     4               cpdID1      .8                 1.8         138.6       84:12.6 72:45
+1          2.5                     4               cpdID2      .2                 2.6         137.1       102:45 68:55
+1          2.5                     4               original    0                  2.4         138.6       68:55 72:45 84:12.6 102:45 72:55
+1          2.5                     4               residual    0                  2.4         138.6       72:10
+etc        etc                     etc             etc         etc                etc         etc         etc
+=========  =====================   =============   =========== ================== =========== =========== ==================================
 
-* scanID: The row number from the peak information file that gives which feature this spectrum belongs or if peak information is not provided, this is the scanID of the MS/MS spectrum.
+* featureID: The row number from the peak information file that gives which feature this spectrum belongs or if peak information is not provided, this is the scanID of the MS/MS spectrum.
 * Signal to Noise Ratio: denotes the  the signal attributed to a particular compound divided by the signal not attributed to any compound.
 * numComponents: The number of components used in the deconvolution.
 * componentID: compound ID for each component. If this field is "original" then this is the acquired spectrum. Residual is the error between the reconstructed spectrum and the acquired.
+* componentAbundance: mixing coefficient for each component in the deconvolution
+* componentRT: database retention time for the precursor of the component
 * ComponentMz: The m/z value of the precursor of the component.
-* rt: The retention time where the spectrum was acquired.
-* spectrum: The spectrum for each componet given in a m/z:intensity pairs separated by a space.
+* spectrum: The spectrum for each component given in a m/z:intensity pairs separated by a space.
 
 
 **<fn>_decoID.csv** gives the metabolite identification results after the deconvolution. With a single match on each line. The format is given below:
 
-======  ====================    ====  ============   ===============  =============   ==============   ===========    =========   =========   ===========
-scanID  isolation_center_m/z    rt    compound_m/z    DB_Compound_ID  Compound_Name   DB_Spectrum_ID   dot_product    ppm_Error   Abundance   ComponentID
-======  ====================    ====  ============   ===============  =============   ==============   ===========    =========   =========   ===========
-1       133.014                 2.4   133.014        cpdID01          Malic Acid      HMDB0031518      99.8           -1.3        0.8         cpdID01
-etc     etc                     etc   etc            etc              etc             etc              etc            etc         etc         etc
-======  ====================    ====  ============   ===============  =============   ==============   ===========    =========   =========   ===========
+=========  ====================    ====  ============ =========== ================ ===============  =============   ==============   ===========    =========   =========   =========== =========
+featureID  isolation_center_m/z    rt    compound_m/z compound_rt compound_formula DB_Compound_ID   Compound_Name   DB_Spectrum_ID   dot_product    ppm_Error   Abundance   ComponentID  redundant
+=========  ====================    ====  ============ =========== ================ ===============  =============   ==============   ===========    =========   =========   =========== =========
+1          133.014                 2.4   133.014      2.1         C4H6O5           cpdID01          Malic Acid      HMDB0031518      99.8           -1.3        0.8         cpdID01     FALSE
+etc        etc                     etc   etc          etc         etc              etc              etc             etc              etc            etc         etc         etc         etc
+=========  ====================    ====  ============ =========== ================ ===============  =============   ==============   ===========    =========   =========   =========== =========
 
-* scanID: The row number from the peak information file that gives which feature this spectrum belongs or if peak information is not provided, this is the scanID of the MS/MS spectrum.
+* featureID: The row number from the peak information file that gives which feature this spectrum belongs or if peak information is not provided, this is the scanID of the MS/MS spectrum.
 * isolation_center_m/z: The feature of interest m/z value.
 * rt: The retention time where the spectrum was acquired.
 * compound_m/z: The m/z value of the matched compound.
+* compound_rt: The retention time of the database compound.
+* compound_formula: The formula of the database precursor compound.
 * DB_Compound_ID: The compound ID of the matched compound.
 * Compound_Name: The name of the matched compound.
 * DB_Spectrum_ID: Spectrum ID or accession of the matched spectrum. Given by DB# in the input database.
@@ -162,6 +165,8 @@ etc     etc                     etc   etc            etc              etc       
 * ppm_Error: The mass error in parts per million (ppm) between the feature's m/z and the database match m/z.
 * Abundance: The normalized regression coefficient of this compound in the deconvolution. Note: this should not be used for comparative/quantitative purposes.
 * componentID: compound ID of the component matched to. If this field is "original" then this is the acquired spectrum. Residual is the error between the reconstructed spectrum and the acquired.
+* redundant: Result of redundancy check. If TRUE the matches component could have been a different database compound. This indicates a non-unique deconvolution and possibly an inconclusive identification
+
 
 **<fn>.DecoID** is a gzipped pickle file that contains all the information provided in the previous two output files but in a format that allows for easier analysis and visualation through
 the DecoID user interface.
@@ -180,10 +185,11 @@ Regardless of data type the following parameters are required:::
     useMS1 = True #use MS1 data if available
     massAcc = 10 #Mass accuracy of instrument
     res = 2 # # of decimal places to round MS/MS peaks.
-
+    fragThresh = 0 #absolute intensity threshold for MS/MS peaks
+    rtTol = 1 #retention time threshold
 With this the DecoID object can be instantiated and database parsed:::
 
-    decID = DecoID(libFile,numCores)
+    decID = DecoID(libFile, "reference", numCores)
 
 Before the raw data can be read-in some data-type specific parameters must be provided:::
 
@@ -192,20 +198,20 @@ Before the raw data can be read-in some data-type specific parameters must be pr
 
 Now the raw MS/MS data can be read:::
 
-    decID.readData(file, 2, useMS1, DDA, massAcc,peakDefinitions=peakfile)
+    decID.readData(file, res, useMS1, DDA, massAcc,offset,peakDefinitions=peakfile,frag_cutoff=fragCutoff)
 
 With the data read, the search parameters can be defined:::
 
-    lam = 1 # LASSO regression coefficient. The higher this is the more sparse a solution will be found. Recommend 1 for DDA and 100 for DIA.
+    lam = 5.0 # LASSO regression coefficient. The higher this is the more sparse a solution will be found. Recommend 5.0 for DDA and 50.0 for DIA.
     useIso = True # Predict M+1 isotopologue spectra to remove contamination from orphan isotopologues
 
 Optionally, acquired pure MS/MS spectra can be used to deconvolve spectra in the datafile if data is from a DDA experiment. To enable this the command below must be run:::
 
-    decID.identifyUnknowns(resPenalty=lam,iso=useIso)
+    decID.identifyUnknowns(iso=useIso,rtTol=rtTol,dpThresh=80,resPenalty=lam)
 
 Now, the datafile can be searched with the command below:::
 
-    decID.searchSpectra("y",lam,iso=useIso)
+    decID.searchSpectra("y", lam , iso=useIso,rtTol=rtTol)
 
 Advanced Usage
 --------------
@@ -230,14 +236,38 @@ There is no penalty for more complex solutions.
 High Performance Computing
 ++++++++++++++++++++++++++
 
-Documentation in progress. See DecoID/HPC_scripts/
+DecoID can be used in a UNIX environment and is suitable and has been tested on HPC cluster. The easiest usage is to submit individual
+files for deconvolution as separate jobs. This can be very helpful for large datasets searched against multiple databases.
+See DecoID/HPC_scripts for examples.
 
 Connection to mzCloud
 +++++++++++++++++++++
 
 Connection to mzCloud is dependent on an access key granted by Thermo-Fisher Scientific. If a key is granted, it must
-be entered during instantiation of the DecoID object and the libFile parameter must be "none":::
+be entered during instantiation of the DecoID object and the libFile parameter must be "none". The library can be either
+"reference" or "autoprocessing":::
 
-    decID = DecoID("none",numCores,api_key="XXXXXXXXXXXX")
+    decID = DecoID("none", "reference", numCores,api_key="XXXXXXXXX)
 
+Parallel Usage with MS-DIAL
++++++++++++++++++++++++++++
 
+DecoID can be used in parallel with MS-DIAL on DIA MS/MS data. First, DecoID and MS-DIAL should be used individually.
+The MS-DIAL peak list should be exported as a .txt file with the deconvoluted spectra. Next, this txt file should
+be imported into DecoID with the following command:::
+
+    decID.readMS_DIAL_data(fn,mode,massAcc,peakFile)
+
+Here fn in the path to the text file and mode is "Positive" or "Negative" depending on the polarity of the acquired data.
+
+Next, the MS-DIAL ouput can be searched with:::
+
+    decID.searchSpectra("y",float("inf"),iso=useIso,rtTol = rtTol)
+
+This command will directly search (without deconvolution) the MS-DIAL deconvolved spectra against the referecne database using the same peak list as before.
+Lastly, the results can be combined across multiple datafiles with the following command. Note that this function can be used to merge the results of any
+datafile not just between MS-DIAL and DecoID. For instance, to combine the results of several MS/MS experiments of the same sample.::
+
+    decID.combineResultsAutoAnnotate([<msdialfilename>,<decoIDFilename>,<outputfilename>,numHits = 3)
+
+An example script is available at DecoID/examples/exampleUsage_msdial_decoID.py
