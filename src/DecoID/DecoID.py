@@ -1315,8 +1315,10 @@ class DecoID():
         """
         Combine results from several files. Takes the best hit found across multiple files
 
-        :param filenames: filenames to merge
+        :param filenames: list, filenames to merge should not have any file endings (i.e. .mzML, _decoID.csv)
         :param newFilename: output file name
+        :param numHits: int, number of hits to return in the merged file for each feature
+        :param min_score: float, minimum dot product score for returned hits.
         :return: None
         """
         bestResults = pd.read_csv(filenames[0] + "_decoID.csv")
