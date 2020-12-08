@@ -565,6 +565,7 @@ def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=
                         #settings = filter.split("@")[1].split()[0]
                         #fragmentMode = settings[:3]
                         #NCE = float(settings[3:])
+                        CE = temp["precursorList"]["precursor"][0]["activation"]['collision energy']
                         rt = temp["scanList"]["scan"][0]["scan start time"]
                         mzs = list(zip(temp["m/z array"],temp["intensity array"]))
                         tempSpecs = []
@@ -575,7 +576,7 @@ def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=
                                 spectra[np.round(x,resolution)] += y
 
                         result.append({"id":id,"spectra":spectra,"mode":acquisitionMode,"center m/z":
-                                           centerMz,"lower m/z":lowerBound,"higher m/z":upperBound,"rt":rt,"signal":tic})
+                                           centerMz,"lower m/z":lowerBound,"higher m/z":upperBound,"rt":rt,"signal":tic,"CE":CE})
             elif useMS1 and temp['ms level'] == 1:
                 ms1Scans[temp["scanList"]["scan"][0]["scan start time"]] = {mz: i for mz, i in zip(temp["m/z array"], temp["intensity array"])}
         reader.close()
