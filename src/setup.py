@@ -3,7 +3,7 @@ from setuptools import setup,find_packages
 setup(
   name = 'DecoID',         # How you named your package folder (MyLib)
   packages = ["DecoID"],   # Chose the same as "name"
-  version = '0.2.6',      # Start with a small number and increase it with every change you make
+  version = '0.2.7',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Metabolomics software for database assisted deconvolution of MS/MS spectra',   # Give a short description about your library
   author = 'Ethan Stancliffe',                   # Type in your name

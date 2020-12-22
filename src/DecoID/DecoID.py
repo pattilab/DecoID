@@ -359,11 +359,11 @@ def clusterSpectraByMzs(mzs,ids,rts,groups,mzTol = 5):
         for x2 in prelimClusters:
             if 1e6*abs(x2 - mzs[x])/mzs[x] <= mzTol or groups[x] in clusterGroups[x2]:
                 clusterGroups[x2].append(groups[x])
-                prelimClusters[x2].append([mzs[x],ids[x]])
+                prelimClusters[x2].append([mzs[x],ids[x],groups[x]])
                 good = False
                 break
         if good:
-            prelimClusters[mzs[x]] = [[mzs[x],ids[x]]]
+            prelimClusters[mzs[x]] = [[mzs[x],ids[x],groups[x]]]
             clusterGroups[mzs[x]] = [groups[x]]
 
     return prelimClusters
@@ -884,7 +884,7 @@ class DecoID():
                                                    [x["rt"] for x in samples],list(range(len(samples))) ,self.massAcc)
                     index = 0 #put samples into groups
                     for mz in mzGroups:
-                        for m, id in mzGroups[mz]:
+                        for m, id,g in mzGroups[mz]:
                             samplesDict[id]["group"] = index
                         index += 1
             #if peak information is not provided set each ms/ms spectrum as a unique feature
@@ -1403,13 +1403,13 @@ class DecoID():
         processes = []
         dbLock = Lock()
         availableToGrab = Value('i',1)
-        samplesDict = {x["id"]:i for x,i in zip(samples,range(len(samples)))}
+        samplesDict = {(x["id"],x["group"]):i for x,i in zip(samples,range(len(samples)))}
         keys = list(samplesDict.keys())
-        mzGroups  = clusterSpectraByMzs([samples[samplesDict[k]]["center m/z"] for k in keys],[samples[samplesDict[k]]["id"] for k in keys],[samples[samplesDict[k]]["rt"] for k in keys],[samples[samplesDict[k]]["group"] for k in keys],self.massAcc)
+        mzGroups = clusterSpectraByMzs([samples[samplesDict[k]]["center m/z"] for k in keys],[samples[samplesDict[k]]["id"] for k in keys],[samples[samplesDict[k]]["rt"] for k in keys],[samples[samplesDict[k]]["group"] for k in keys],self.massAcc)
         mzGroupsWSamples = {x:{"samples":[]} for x in mzGroups}
         for mz in mzGroups:
-            for m,id in mzGroups[mz]:
-                mzGroupsWSamples[mz]["samples"].append(samples[samplesDict[id]])
+            for m,id,g in mzGroups[mz]:
+                mzGroupsWSamples[mz]["samples"].append(samples[samplesDict[(id,g)]])
 
         for mz in mzGroupsWSamples:
             mzGroupsWSamples[mz]["lower m/z"] = np.min([x["lower m/z"] for x in mzGroupsWSamples[mz]["samples"]])
