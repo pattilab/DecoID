@@ -23,21 +23,41 @@ np.seterr(divide='ignore', invalid='ignore')
 from copy import deepcopy
 import requests
 import json
+import scipy.stats as stats
+import logging
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
+logging.getLogger('tensorflow').setLevel(logging.FATAL)
+import keras
+import zipfile
+
 if getattr(sys, 'frozen', False):
     application_path = sys._MEIPASS
-    MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-        "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                        "rb"))}
+    # MZCOMPOUNDTREELINK = {"reference": pkl.load(
+    #     open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+    #     "autoprocessing": pkl.load(open(os.path.join(application_path,
+    #                                                  "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+    #                                     "rb"))}
 elif __file__:
 
     application_path = os.path.dirname(__file__)
-    MZCOMPOUNDTREELINK = {"reference": pkl.load(
-        open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
-        "autoprocessing": pkl.load(open(os.path.join(application_path,
-                                                     "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
-                                        "rb"))}
+
+MZCOMPOUNDTREELINK = {"reference": pkl.load(
+    open(os.path.join(application_path, "mzCloudCompound2TreeLinkagereference.pkl"), "rb")),
+    "autoprocessing": pkl.load(open(os.path.join(application_path,
+                                                 "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
+                                    "rb"))}
+uniqueLosses = pkl.load(open(os.path.join(application_path,
+                                                     "uniqueLosses.pkl"),
+                                        "rb"))
+
+path = (os.path.join(os.path.join(application_path,"model.ann"),"model.ann"))
+
+if not os.path.isdir(path):
+    zipfile.ZipFile(os.path.join(application_path,"model.ann.zip"),"r").extractall(os.path.join(application_path,"model.ann"))
+
+model = keras.models.load_model(path)
+
 
 timeout = 30
 CONCURRENTREQUESTMAX = 1
@@ -129,7 +149,7 @@ def deconvolveLASSO(A, b, lb, ub, resPenalty=10,numRepeats = 10):
         return [flatten(params),s2nR]
 
 
-def dotProductSpectra(foundSpectra,b):
+def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1):
     """
     Computes the normalized dot product (cosine) similarity between two spectra.
 
@@ -144,7 +164,6 @@ def dotProductSpectra(foundSpectra,b):
         num = np.sum([foundSpectra[x]*b[x] for x in mzs]) #compute num
         denom = np.sqrt(np.sum([x**2 for x in foundSpectra.values()])*sum([x**2 for x in b.values()])) #compute denom
         val = num/denom
-        return num/denom
     #if input spectra are lists
     else:
         b = flatten(b) #flatten spectra
@@ -153,6 +172,33 @@ def dotProductSpectra(foundSpectra,b):
                 [x**2 for x in b])))
     if np.isnan(val): val = 0
     return val
+
+def NNScoring(found,ref,mz1,mz2):
+    mz1 = np.round(mz1)
+    mz2 = np.round(mz2)
+
+    embeddedSpectra = [np.zeros((len(uniqueLosses))) for _ in range(2)]
+    tol = .5
+    ind = 0
+    for spectrum,mz in zip([found,ref],[mz1,mz2]):
+        f = collapseAsNeeded(spectrum,0)
+        for mzF, i in f.items():
+            loss = mz - mzF
+            for l in range(len(uniqueLosses)):
+                if uniqueLosses[l] > loss:
+                    diff = abs(uniqueLosses[l] - loss)
+                    diff2 = abs(uniqueLosses[l - 1] - loss)
+                    if min([diff, diff2]) < tol:
+                        if diff < diff2:
+                            embeddedSpectra[ind][l] += i
+                        else:
+                            embeddedSpectra[ind][l - 1] += i
+                    break
+        ind += 1
+    embeddedSpectra = [x/np.sum(x) for x in embeddedSpectra]
+    score = model.predict(np.array([np.concatenate(embeddedSpectra)]))[0][0]
+    return score
+
 
 def replaceAllCommas(string):
     while "," in string:
@@ -171,7 +217,7 @@ def flatten(l):
 
 
 
-def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt,redundancyCheckThresh):
+def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indices,resolution):
 
     """Goal is to take deconvolved aspects of the spectra"""
     numComponents = len([x for x in range(len(res)) if res[x] > 0])
@@ -230,7 +276,19 @@ def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, r
         componentThresh = np.inf
         for x in range(len(res)):
             if abs(centerMz-masses[x])/masses[x]*1e6 < massAcc and (rts[x] < 0 or abs(rts[x]-rt) < rtTol):
-                dp = 100*dotProductSpectra(matrix[x],components[(comp,mz,r,ab)])
+                #dp = 100*dotProductSpectra(matrix[x],components[(comp,mz,r,ab)])
+
+
+                spec1 = {}
+                spec2 = {}
+                for index,i1,i2 in zip(range(len(matrix[x])),matrix[x],components[(comp,mz,r,ab)]):
+                    if i1 + i2 > 1e-5:
+                        mm = np.round(indices[index] * 10 ** (-1 * resolution), resolution)
+                        spec1[mm] = i1
+                        spec2[mm] = i2
+
+                dp = 100*scoringFunc(spec1,spec2,masses[x],mz)
+
                 if dp > resScores[x][0]:
                     resScores[x] = [dp,components[(comp,mz,r,ab)],matrix[x],comp,centerMz,rt,False]
                 if metIDs[x] == comp:
@@ -450,7 +508,7 @@ def pullMostSimilarSpectra(trees,spectra):
     returnDict = {}
     for tree,ms2Scans in trees.items():
         if len(ms2Scans) > 0:
-            temp = [[id,ms2,dotProductSpectra(spectra,ms2)] for id,ms2 in ms2Scans.items()]
+            temp = [[id,ms2,dotProductSpectra(ms2,spectra)] for id,ms2 in ms2Scans.items()]
             temp.sort(key=lambda x:x[2],reverse=True)
             returnDict[tree] = temp[0][:2]
     return returnDict
@@ -659,12 +717,13 @@ class DecoID():
     :param label: str, optional label to add to the end of output files
     :param api_key: str, for use of mzCloud api, access key must be entered
     """
-    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15,numConcurrentGroups=20):
+    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15,numConcurrentGroups=20,scoringFunc=dotProductSpectra):
         self.numConcurrentMzGroups = numConcurrentGroups
         self.libFile = libFile
         self.useDBLock = False
         #read tsv library file
         self.mplus1PPM = mplus1PPM
+        self.scoringFunc = scoringFunc
         #for msp library files
         if ".msp" in libFile:
             #try:
@@ -1444,7 +1503,7 @@ class DecoID():
                      any(key[1] < samp["rt"] and key[2] > samp["rt"] for samp in samples)}
             p = Process(target=DecoID.processGroup,
                         args=(
-                            samples,group,trees, spectra, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol,self.redundancyCheckThresh))
+                            samples,group,trees, spectra, self.iso,self.DDA,self.massAcc,self.peaks,q,self.resPenalty,self.resolution,toAdd,self.peakData,lowerBound,upperBound,self.rtTol,self.redundancyCheckThresh,self.scoringFunc))
             #t = Thread(target=startProc, args=(p, numProcesses, lock))
             while not checkRoom(numP, l):
                 time.sleep(1)
@@ -1453,6 +1512,7 @@ class DecoID():
             with l:
                 numP.value -= 1
             return 0
+
 
         def checkRoom(val, l):
             with l:
@@ -1489,7 +1549,7 @@ class DecoID():
 
 
     @staticmethod
-    def processGroup(samples,group,trees, spectra, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol,redundancyCheckThresh):
+    def processGroup(samples,group,trees, spectra, iso,DDA,massAcc,peaks,q,resPenalty,resolution,toAdd,peakData,lowerbound,upperbound,rtTol,redundancyCheckThresh,scoringFunc):
         [metIDs, spectraIDs, matrix, masses, metNames, rts, formulas, indicesAll, reduceSpec] = getMatricesForGroup(trees, spectra,resolution, toAdd)
         isoIndices = [x for x in range(len(metIDs)) if "(M+1)" in metNames[x]]
 
@@ -1515,7 +1575,7 @@ class DecoID():
                 frags = []
 
             scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
-                                                    masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh)
+                                                    masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution)
 
             result = {(met, specID, mass, name,r,formula, safeDivide(comp, sum(resVector))): coeff for
                       met, name, specID, coeff, mass, comp,r,formula in

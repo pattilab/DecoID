@@ -3,7 +3,7 @@ from setuptools import setup,find_packages
 setup(
   name = 'DecoID',         # How you named your package folder (MyLib)
   packages = ["DecoID"],   # Chose the same as "name"
-  version = '0.2.7',      # Start with a small number and increase it with every change you make
+  version = '0.2.8',      # Start with a small number and increase it with every change you make
   license='MIT',        # Chose a license from here: https://help.github.com/articles/licensing-a-repository
   description = 'Metabolomics software for database assisted deconvolution of MS/MS spectra',   # Give a short description about your library
   author = 'Ethan Stancliffe',                   # Type in your name
@@ -20,7 +20,9 @@ setup(
           'pyteomics',
           'requests',
           'lxml',
-          'molmass'
+          'molmass',
+          'keras',
+          'tensorflow'
       ],
   classifiers=[
     'Development Status :: 4 - Beta',      # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package
@@ -30,6 +32,6 @@ setup(
     'Programming Language :: Python :: 3.7',      #Specify which pyhton versions that you want to support
   ],
   package_data={
-    "":["*.pkl"]
+    "":["*.pkl","*.zip"]
     }
 )
