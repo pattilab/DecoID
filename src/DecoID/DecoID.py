@@ -51,12 +51,12 @@ uniqueLosses = pkl.load(open(os.path.join(application_path,
                                                      "uniqueLosses.pkl"),
                                         "rb"))
 
-path = (os.path.join(os.path.join(application_path,"model.ann"),"model.ann"))
+path = os.path.join(application_path,"model")
 
 if not os.path.isdir(path):
-    zipfile.ZipFile(os.path.join(application_path,"model.ann.zip"),"r").extractall(os.path.join(application_path,"model.ann"))
+    zipfile.ZipFile(os.path.join(application_path,"model.zip"),"r").extractall(os.path.join(application_path,"model"))
 
-model = keras.models.load_model(path)
+model = {"Positive":keras.models.load_model(os.path.join(path,"model_pos")),"Negative":keras.models.load_model(os.path.join(path,"model_neg"))}
 
 
 timeout = 30
@@ -149,7 +149,7 @@ def deconvolveLASSO(A, b, lb, ub, resPenalty=10,numRepeats = 10):
         return [flatten(params),s2nR]
 
 
-def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1):
+def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1,polarity=-1):
     """
     Computes the normalized dot product (cosine) similarity between two spectra.
 
@@ -173,21 +173,21 @@ def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1):
     if np.isnan(val): val = 0
     return val
 
-def NNScoring(found,ref,mz1,mz2):
+def NNScoring(found,ref,mz1,mz2,polarity):
     mz1 = np.round(mz1)
     mz2 = np.round(mz2)
 
-    embeddedSpectra = [np.zeros((len(uniqueLosses))) for _ in range(2)]
+    embeddedSpectra = [np.zeros((len(uniqueLosses[polarity]))) for _ in range(2)]
     tol = .5
     ind = 0
     for spectrum,mz in zip([found,ref],[mz1,mz2]):
         f = collapseAsNeeded(spectrum,0)
         for mzF, i in f.items():
             loss = mz - mzF
-            for l in range(len(uniqueLosses)):
-                if uniqueLosses[l] > loss:
-                    diff = abs(uniqueLosses[l] - loss)
-                    diff2 = abs(uniqueLosses[l - 1] - loss)
+            for l in range(len(uniqueLosses[polarity])):
+                if uniqueLosses[polarity][l] > loss:
+                    diff = abs(uniqueLosses[polarity][l] - loss)
+                    diff2 = abs(uniqueLosses[polarity][l - 1] - loss)
                     if min([diff, diff2]) < tol:
                         if diff < diff2:
                             embeddedSpectra[ind][l] += i
@@ -196,7 +196,7 @@ def NNScoring(found,ref,mz1,mz2):
                     break
         ind += 1
     embeddedSpectra = [x/np.sum(x) for x in embeddedSpectra]
-    score = model.predict(np.array([np.concatenate(embeddedSpectra)]))[0][0]
+    score = model[polarity].predict(np.array([np.concatenate(embeddedSpectra)]))[0][0]
     return score
 
 
@@ -217,7 +217,7 @@ def flatten(l):
 
 
 
-def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indices,resolution):
+def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indices,resolution,polarity):
 
     """Goal is to take deconvolved aspects of the spectra"""
     numComponents = len([x for x in range(len(res)) if res[x] > 0])
@@ -287,7 +287,7 @@ def scoreDeconvolution(originalSpectra, matrix, res, metIDs, masses, centerMz, r
                         spec1[mm] = i1
                         spec2[mm] = i2
 
-                dp = 100*scoringFunc(spec1,spec2,masses[x],mz)
+                dp = 100*scoringFunc(spec1,spec2,masses[x],mz,polarity)
 
                 if dp > resScores[x][0]:
                     resScores[x] = [dp,components[(comp,mz,r,ab)],matrix[x],comp,centerMz,rt,False]
@@ -1575,7 +1575,7 @@ class DecoID():
                 frags = []
 
             scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
-                                                    masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution)
+                                                    masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution,sample["mode"])
 
             result = {(met, specID, mass, name,r,formula, safeDivide(comp, sum(resVector))): coeff for
                       met, name, specID, coeff, mass, comp,r,formula in
@@ -1611,7 +1611,7 @@ class DecoID():
                             frags = []
 
                         scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
-                                                                masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh)
+                                                                masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh,indicesAll,resolution,sample["mode"])
 
                         result = {(met, specID, mass, name, r, formula, safeDivide(comp, sum(resVector))): coeff for
                                   met, name, specID, coeff, mass, comp, r, formula in
