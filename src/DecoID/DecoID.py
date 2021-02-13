@@ -26,9 +26,7 @@ import json
 import scipy.stats as stats
 import logging
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
-logging.getLogger('tensorflow').setLevel(logging.FATAL)
-import keras
+
 import zipfile
 
 if getattr(sys, 'frozen', False):
@@ -53,11 +51,9 @@ uniqueLosses = pkl.load(open(os.path.join(application_path,
 
 path = os.path.join(application_path,"model")
 
-if not os.path.isdir(path):
-    zipfile.ZipFile(os.path.join(application_path,"model.zip"),"r").extractall(os.path.join(application_path,"model"))
+model = -1
 
-model = {"Positive":keras.models.load_model(os.path.join(path,"model_pos")),"Negative":keras.models.load_model(os.path.join(path,"model_neg"))}
-
+logReg = {x:pkl.load(open(os.path.join(application_path,"frac_shared_frag_log_reg_" + x + ".pkl"),"rb")) for x in ["Positive","Negative"]}
 
 timeout = 30
 CONCURRENTREQUESTMAX = 1
@@ -155,6 +151,9 @@ def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1,polarity=-1):
 
     :param foundSpectra: dict or array like, this is the first spectrum
     :param b: dict or array like, this is the second spectrum
+    :param mz1: not used for this method
+    :param mz2: not used for this method
+    :param polarity: not used for this method
     :return: Cosine similarity of the two spectrum in a scale of 0-1
     """
     #if input spectra are dictionaries
@@ -173,31 +172,57 @@ def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1,polarity=-1):
     if np.isnan(val): val = 0
     return val
 
-def NNScoring(found,ref,mz1,mz2,polarity):
-    mz1 = np.round(mz1)
-    mz2 = np.round(mz2)
+def safeNormalize(vec):
+    s = np.sum(vec)
+    if s > 1e-5:
+        return vec / s
+    else:
+        return vec
 
-    embeddedSpectra = [np.zeros((len(uniqueLosses[polarity]))) for _ in range(2)]
-    tol = .5
+#add shared framgnets
+def NNScoring(found,ref,mz1,mz2,polarity):
+
+    #update
+    maxMass = 1000
+    embeddedSpectra = [np.zeros((maxMass + 1)) for _ in range(2)]
     ind = 0
-    for spectrum,mz in zip([found,ref],[mz1,mz2]):
+    for spectrum,_ in zip([found,ref],[mz1,mz2]):
         f = collapseAsNeeded(spectrum,0)
         for mzF, i in f.items():
-            loss = mz - mzF
-            for l in range(len(uniqueLosses[polarity])):
-                if uniqueLosses[polarity][l] > loss:
-                    diff = abs(uniqueLosses[polarity][l] - loss)
-                    diff2 = abs(uniqueLosses[polarity][l - 1] - loss)
-                    if min([diff, diff2]) < tol:
-                        if diff < diff2:
-                            embeddedSpectra[ind][l] += i
-                        else:
-                            embeddedSpectra[ind][l - 1] += i
-                    break
+            mz2_corr = int(np.round(mzF))
+            if mz2_corr > maxMass:
+                mz2_corr = 0
+            embeddedSpectra[ind][mz2_corr] += 1
         ind += 1
-    embeddedSpectra = [x/np.sum(x) for x in embeddedSpectra]
-    score = model[polarity].predict(np.array([np.concatenate(embeddedSpectra)]))[0][0]
+    embeddedSpectra = [safeNormalize(x) for x in embeddedSpectra]
+
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # FATAL
+    logging.getLogger('tensorflow').setLevel(logging.FATAL)
+    import keras
+    if not os.path.isdir(path):
+        zipfile.ZipFile(os.path.join(application_path, "model.zip"), "r").extractall(
+            os.path.join(application_path, "model"))
+
+    modelName = {"Positive": os.path.join(path, "model_pos"),
+             "Negative": os.path.join(path, "model_neg")}
+
+    model = keras.models.load_model(modelName[polarity])
+
+    score = model.predict(np.array([np.concatenate(embeddedSpectra)]))[0][0]
+
     return score
+
+def sharedFragmentScoring(found,ref,mz1,mz2,polarity):
+    if len(set(list(found.keys())).union(set(list(ref.keys())))) > 0:
+        foundKeys = set({k for k,i in found.items() if i > 1e-5})
+        refKeys = set({k for k,i in ref.items() if i > 1e-5})
+        val =len(foundKeys.intersection(refKeys))/len(foundKeys.union(refKeys))
+        print(val)
+    else:
+        val = 0
+
+    return logReg[polarity].predict_proba([[val]])[0][0]
+
 
 
 def replaceAllCommas(string):
@@ -494,11 +519,10 @@ def getMatricesForGroup(trees,spectra,res,clusters):
         rts += [np.mean(key[1:]) for key in clusterKeys]
         formulas += ["-1" for _ in clusterKeys]
 
-    indexRef = [np.round(x * 10 ** (-1 * res), res) for x in list(range(int(MAXMASS * 10 ** res)))]
     indices = list(set(flatten([list(spectrum.keys())] + [list(m.keys()) for m in matrix])))
     indices.sort()
 
-    indicesAll = [indexRef.index(np.round(x, res)) for x in indices]
+    indicesAll = [int(np.round(x/(10**(-1*res)))) for x in indices]
     matrix = [normalizeSpectra([getVal(m, x) for x in indices]) for m in matrix]
     reduceSpec = [[getVal(spec, x) for x in indices] for spec in spectra]
 
@@ -1276,7 +1300,7 @@ class DecoID():
                         outputScanFile.write(str(id) + "," + str(s2n) + "," + str(numComponents) + "," + str(c[0]) + "," +str(c[2]) + "," + str(c[3]) + "," + str(c[1]) + ",")
                         for ind,i in zip(indices,components[c]):
                             if i > 0:
-                                outputScanFile.write(str(indexRef[ind]) + ":" + str(i) + " ")
+                                outputScanFile.write(str(np.round(ind * 10 ** (-1 * self.resolution), self.resolution)) + ":" + str(i) + " ")
                         outputScanFile.write("\n")
                     update = False
                     if id not in outputDataFile:
@@ -1309,21 +1333,23 @@ class DecoID():
                                 outputDataFile[id]["Hits"][x] = result[x]
                 index += 1
                 if type(verbose) == type(str()):
-                    if status == 0:
-                        print("0................................................100")
-                    if numSamples == 0:
-                        for _ in range(50):
-                            if "yV" in verbose:
-                                print("x", flush=True)
-                            else:
-                                print("x", end="", flush=True)
-                    else:
-                        while index / numSamples > status:
-                            if "yV" in verbose:
-                                print("x", flush=True)
-                            else:
-                                print("x", end="", flush=True)
-                            status += .02
+                    if "y" in verbose:
+                        if status == 0:
+                            print("0................................................100")
+                        if numSamples == 0:
+                            for _ in range(50):
+                                if "yV" in verbose:
+                                    print("x", flush=True)
+                                else:
+                                    print("x", end="", flush=True)
+                        else:
+                            while index / numSamples > status:
+                                if "yV" in verbose:
+                                    print("x", flush=True)
+                                else:
+                                    print("x", end="", flush=True)
+                                status += .02
+
                 else:
                     if numSamples == 0:
                         for _ in range(50):
@@ -1611,7 +1637,7 @@ class DecoID():
                             frags = []
 
                         scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
-                                                                masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh,indicesAll,resolution,sample["mode"])
+                                                                masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution,sample["mode"])
 
                         result = {(met, specID, mass, name, r, formula, safeDivide(comp, sum(resVector))): coeff for
                                   met, name, specID, coeff, mass, comp, r, formula in
