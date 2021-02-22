@@ -45,9 +45,9 @@ MZCOMPOUNDTREELINK = {"reference": pkl.load(
     "autoprocessing": pkl.load(open(os.path.join(application_path,
                                                  "mzCloudCompound2TreeLinkageautoprocessing.pkl"),
                                     "rb"))}
-uniqueLosses = pkl.load(open(os.path.join(application_path,
-                                                     "uniqueLosses.pkl"),
-                                        "rb"))
+#uniqueLosses = pkl.load(open(os.path.join(application_path,
+#                                                     "uniqueLosses.pkl"),
+#                                        "rb"))
 
 path = os.path.join(application_path,"model")
 
@@ -1807,7 +1807,7 @@ class mzCloudPy():
                 masses, sub_forms, carbon_pos, bounds = getSubForms(tree[3],mode)
             for specID in trees[tree]:
                 if tree in possIsotopes:
-                    spec = createM1FromM0andFragAnnotation(trees[tree][specID],masses,sub_forms,carbon_pos,bounds,ppmError)
+                    spec = createM1FromM0andFragAnnotation(trees[tree][specID],masses,sub_forms,carbon_pos,bounds,ppmError)[0]
                 else:
                     spec = trees[tree][specID]
                 returnDict[(id,mz,name,tree[4],tree[3])][specID] = collapseAsNeeded(spec,res)

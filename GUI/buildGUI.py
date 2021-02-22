@@ -17,7 +17,9 @@ PyInstaller.__main__.run([
     '--add-binary=%s' % "../databases/MoNA-export-LC-MS-MS_Spectra.db;.",
     '--add-binary=%s' % '../src/DecoID/mzCloudCompound2TreeLinkageautoprocessing.pkl;.',
     '--add-binary=%s' % '../src/DecoID/mzCloudCompound2TreeLinkagereference.pkl;.',
-
+    '--add-binary=%s' % '../src/DecoID/model.zip;.',
+    '--add-binary=%s' % '../src/DecoID/frac_shared_frag_log_reg_Negative.pkl;.',
+    '--add-binary=%s' % '../src/DecoID/frac_shared_frag_log_reg_Positive.pkl;.',
     '-y',
     'decoIDGUI.py'])
 
