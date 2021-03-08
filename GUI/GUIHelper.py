@@ -466,11 +466,11 @@ def displayHit(result,feature,cluster,filename,ms1Deco,isoBounds):
     a3 = f.add_subplot(grid[1,0])
 
     indices = sample[3]
-    decoSpec = sample[11]
+    decoSpec = sample[12]
     spec2Display = []
-    ms1 = sample[12]
+    ms1 = sample[13]
 
-    for spec in sample[14:16]:
+    for spec in sample[15:17]:
         tempSpec = np.zeros(MAXMASS*10**resolution)
         for i,m in zip(indices,spec):
             tempSpec[i] = m
@@ -517,6 +517,8 @@ def appendAnnotation(sample,cluster,filename):
         filename = filename.replace(".raw","_Annotation.csv")
     elif ".mzML" in filename:
         filename = filename.replace(".mzML","_Annotation.csv")
+    elif ".DecoID" in filename:
+        filename = filename.replace(".DecoID","_Annotation.csv")
 
     if not os.path.isfile(filename):
         file = open(filename,"w")
@@ -525,7 +527,7 @@ def appendAnnotation(sample,cluster,filename):
         file = open(filename,"a")
 
     toWrite = [cluster["group"],cluster["m/z"],sample[1],sample[6],sample[8],sample[9],sample[4],
-               sample[7],sample[5],sample[13],1e6*abs(float(cluster["m/z"]) - float(sample[6]))/float(cluster["m/z"])]
+               sample[7],sample[5],sample[14],1e6*abs(float(sample[2]) - float(sample[6]))/float(sample[2])]
     file.write(str(toWrite[0]))
     [file.write(","+str(x)) for x in toWrite[1:]]
     file.write("\n")
@@ -533,16 +535,18 @@ def appendAnnotation(sample,cluster,filename):
 
 def writeResults(filenameOrig,scoreThresh,ppmThresh,usePPM,scanNumber,recursive,iso,peaks):
 
-    try:
+    #try:
         if PPMFILTER[usePPM]:
             ppmThresh = np.inf
         if ".raw" in filenameOrig:
             ending = ".raw"
-        else:
+        elif ".mzML" in filenameOrig:
             ending = ".mzML"
+        elif ".DecoID" in filenameOrig:
+            ending = ".DecoID"
 
         name = filenameOrig.replace(ending, "_decoID.csv")
-        results = open(name,"r").readlines()
+        results = open(name,"r",encoding="latin1").readlines()
         filename = filenameOrig.replace(ending, "_Filtered.csv")
         file = open(filename, "w")
         file.write("#decoID Results for " + filenameOrig + " where the matches have a dot product > " + str(
@@ -552,15 +556,15 @@ def writeResults(filenameOrig,scoreThresh,ppmThresh,usePPM,scanNumber,recursive,
         for line in results[1:]:
             temp = line.rstrip().split(",")
             if scanNumber != "":
-                if abs(float(temp[-3])) < ppmThresh and float(temp[-4]) > scoreThresh and temp[0] == scanNumber:
+                if abs(float(temp[-5])) < ppmThresh and float(temp[-6]) > scoreThresh and temp[0] == scanNumber:
                     file.write(line)
             else:
-                if abs(float(temp[-3])) < ppmThresh and float(temp[-4]) > scoreThresh:
+                if abs(float(temp[-5])) < ppmThresh and float(temp[-6]) > scoreThresh:
                     file.write(line)
-    except:
-        top = Toplevel()
-        Label(top, text="Datafile does not exist for selected file or is open in another program.\nPlease run the search first or close the csv file.",
-              font=LARGE_FONT).pack()
+    #except:
+    #    top = Toplevel()
+    #    Label(top, text="Datafile does not exist for selected file or is open in another program.\nPlease run the search first or close the csv file.",
+    #          font=LARGE_FONT).pack()
 
 
 

@@ -26,7 +26,7 @@ import json
 import scipy.stats as stats
 import logging
 import os
-
+import IsoSpecPy
 import zipfile
 
 if getattr(sys, 'frozen', False):
@@ -342,6 +342,55 @@ def safeDivide(num,denom):
 def splitList(l, n):
     n = int(np.ceil(len(l)/float(n)))
     return list([l[i:i + n] for i in range(0, len(l), n)])
+
+
+def scoreIsotopePattern(ms1,formula,polarity,ppm=10):
+    try:
+        for x in range(len(formula)):
+            if formula[x] == "h" or formula[x] == 'H':
+                v = int(formula[x+1])
+                if polarity == "Positive":
+                    v += 1
+                else:
+                    v -= 1
+                if len(formula) >= x+2:
+                    formula = formula[:x+1] + str(v) + formula[x+2:]
+                else:
+                    formula = formula[:x+1] + str(v)
+
+
+        isotopeSpectrum = {m:i for m,i in IsoSpecPy.IsoTotalProb(.9999,formula)}
+        ms1OI = {}
+        expected = {}
+        notFound = list(isotopeSpectrum.keys())
+
+        for mz,i in ms1.items():
+            toRemove = []
+            found = False
+            for mz2 in notFound:
+                if 1e6 * np.abs(mz2-mz)/mz < ppm:
+                    found = True
+                    if mz not in expected:
+                        expected[mz] = 0
+                    expected[mz] += isotopeSpectrum[mz2]
+                    toRemove.append(mz2)
+            if found:
+                ms1OI[mz] = i
+            notFound = [x for x in notFound if x not in toRemove]
+        for mz in notFound:
+            ms1OI[mz] = 0
+            expected[mz] = isotopeSpectrum[mz]
+
+        keys = list(ms1OI.keys())
+        expected = np.array([expected[k] for k in keys])
+        observed = np.array([ms1OI[k] for k in keys])
+
+        expected =  expected/np.sum(expected)
+        if len(observed) > 0 and np.sum(observed) > 0: observed = observed/np.sum(observed)
+
+        return np.sum(np.abs(np.subtract(expected,observed)))
+    except:
+        return -1
 
 
 def getSubForms(formula,polarity):
@@ -694,7 +743,7 @@ def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=
                 else:
                     result[samp]["percentContamination"] = 0.0
                 result[samp]["fragments"] = [x[0] for x in peaksOfInterest if x[1] > 1e-6]
-                result[samp]["ms1"] = [x for x in peaksOfInterest if x[0] >= result[samp]["center m/z"] - isoWidth]
+                result[samp]["ms1"] = mzScan
 
             if delete:
                 #os.remove(filename)
@@ -1235,7 +1284,7 @@ class DecoID():
                         time.sleep(2)
             #write header
             outfile.write(
-                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,Abundance,ComponentID,redundant\n")
+                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,isotope_Error,Abundance,ComponentID,redundant\n")
             #start Q
             t = Thread(target=self.runQ, args=(
             q,outfile,threshold,self.outputDataFinal,self.filename + self.label + ".DecoID",
@@ -1326,7 +1375,7 @@ class DecoID():
                             outfile.write(str(id) + "," + str(tempMz))
                             [outfile.write(delimiter + z) for z in
                              [str(rt), str(x[2]),str(x[4]),str(x[5]), str(x[0]), str(x[3]), str(x[1]), str(result[x][0]),
-                              str((float(x[2]) - float(tempMz)) * 1e6 / float(tempMz)), str(x[6]),str(componentName),str(result[x][6])]]
+                              str((float(x[2]) - float(tempMz)) * 1e6 / float(tempMz)), str(x[6]),str(x[7]),str(componentName),str(result[x][6])]]
 
                             outfile.write("\n")
                             if filename != "None" and update:
@@ -1579,6 +1628,23 @@ class DecoID():
         [metIDs, spectraIDs, matrix, masses, metNames, rts, formulas, indicesAll, reduceSpec] = getMatricesForGroup(trees, spectra,resolution, toAdd)
         isoIndices = [x for x in range(len(metIDs)) if "(M+1)" in metNames[x]]
 
+        #get isotope pattern match scores
+        compMs1 = {}
+        for s in samples:
+            if "ms1" in s:
+                for mz,i in s["ms1"].items():
+                    found = False
+                    for mz2 in compMs1:
+                        if 1e6 * np.abs(mz-mz2)/mz < massAcc:
+                            compMs1[mz2] += i
+                            found = True
+                            break
+                    if not found:
+                        compMs1[mz] = i
+
+        isotopeScores = [scoreIsotopePattern(compMs1,f,samples[0]["mode"],massAcc) for f in formulas]
+
+
         results = []
         samples2Go = list(samples)
         reduceSpec2Go = list(reduceSpec)
@@ -1603,9 +1669,9 @@ class DecoID():
             scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
                                                     masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution,sample["mode"])
 
-            result = {(met, specID, mass, name,r,formula, safeDivide(comp, sum(resVector))): coeff for
-                      met, name, specID, coeff, mass, comp,r,formula in
-                      zip(metIDs, metNames, spectraIDs, scores, masses, resVector,rts,formulas)}
+            result = {(met, specID, mass, name,r,formula,isoScore, safeDivide(comp, sum(resVector))): coeff for
+                      met, name, specID, coeff, mass, comp,r,formula,isoScore in
+                      zip(metIDs, metNames, spectraIDs, scores, masses, resVector,rts,formulas,isotopeScores)}
 
             # output result
             success = False
@@ -1639,9 +1705,9 @@ class DecoID():
                         scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
                                                                 masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution,sample["mode"])
 
-                        result = {(met, specID, mass, name, r, formula, safeDivide(comp, sum(resVector))): coeff for
-                                  met, name, specID, coeff, mass, comp, r, formula in
-                                  zip(metIDs, metNames, spectraIDs, scores, masses, resVector, rts, formulas)}
+                        result = {(met, specID, mass, name, r, formula,isoScore, safeDivide(comp, sum(resVector))): coeff for
+                                  met, name, specID, coeff, mass, comp, r, formula,isoScore in
+                                  zip(metIDs, metNames, spectraIDs, scores, masses, resVector, rts, formulas,isotopeScores)}
 
                         # output result
                         success = False
