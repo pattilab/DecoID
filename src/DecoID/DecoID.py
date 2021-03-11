@@ -346,49 +346,54 @@ def splitList(l, n):
 
 def scoreIsotopePattern(ms1,formula,polarity,ppm=10):
     try:
-        for x in range(len(formula)):
-            if formula[x] == "h" or formula[x] == 'H':
-                v = int(formula[x+1])
-                if polarity == "Positive":
-                    v += 1
-                else:
-                    v -= 1
-                if len(formula) >= x+2:
-                    formula = formula[:x+1] + str(v) + formula[x+2:]
-                else:
-                    formula = formula[:x+1] + str(v)
+        f1 = molmass.Formula(formula)
 
+        if polarity == "Positive":
+            f1 = f1 + molmass.Formula("H")
+        else:
+            f1 = f1 - molmass.Formula("H")
 
-        isotopeSpectrum = {m:i for m,i in IsoSpecPy.IsoTotalProb(.9999,formula)}
-        ms1OI = {}
-        expected = {}
+        formula = f1.formula
+
+        isotopeSpectrum = {m:i for m,i in IsoSpecPy.IsoTotalProb(.99,formula)}
+
+        expected = []
+        observed = []
         notFound = list(isotopeSpectrum.keys())
 
         for mz,i in ms1.items():
             toRemove = []
             found = False
-            for mz2 in notFound:
-                if 1e6 * np.abs(mz2-mz)/mz < ppm:
-                    found = True
-                    if mz not in expected:
-                        expected[mz] = 0
-                    expected[mz] += isotopeSpectrum[mz2]
+            tmp = 0
+            for mz2 in range(len(notFound)):
+                if 1e6 * np.abs(notFound[mz2]-mz)/mz < ppm:
                     toRemove.append(mz2)
+                    tmp += isotopeSpectrum[notFound[mz2]]
+                    found = True
             if found:
-                ms1OI[mz] = i
-            notFound = [x for x in notFound if x not in toRemove]
+                observed.append(i)
+                expected.append(tmp)
+            notFound = [notFound[x] for x in range(len(notFound)) if x not in toRemove]
+
+        #tmp = 0
+        #for mz,i in isotopeSpectrum.items():
+        #    for mz2,_ in ms1.items():
+        #        if 1e6 * np.abs(mz2-mz)/mz < ppm:
+        #            tmp += i
+        #            break
+
+        tmp = 0
         for mz in notFound:
-            ms1OI[mz] = 0
-            expected[mz] = isotopeSpectrum[mz]
+            observed.append(0)
+            expected.append(isotopeSpectrum[mz])
+            tmp += expected[-1]
 
-        keys = list(ms1OI.keys())
-        expected = np.array([expected[k] for k in keys])
-        observed = np.array([ms1OI[k] for k in keys])
-
+        #print(tmp)
         expected =  expected/np.sum(expected)
-        if len(observed) > 0 and np.sum(observed) > 0: observed = observed/np.sum(observed)
+        if np.sum(observed) > 0: observed = observed/np.sum(observed)
 
-        return np.sum(np.abs(np.subtract(expected,observed)))
+        return 1 - np.sum(np.abs(np.subtract(expected,observed))) / 2.0
+        #return tmp
     except:
         return -1
 
@@ -1629,18 +1634,32 @@ class DecoID():
         isoIndices = [x for x in range(len(metIDs)) if "(M+1)" in metNames[x]]
 
         #get isotope pattern match scores
-        compMs1 = {}
+        mzs = []
         for s in samples:
             if "ms1" in s:
                 for mz,i in s["ms1"].items():
                     found = False
-                    for mz2 in compMs1:
+                    for mz2 in mzs:
                         if 1e6 * np.abs(mz-mz2)/mz < massAcc:
-                            compMs1[mz2] += i
                             found = True
                             break
                     if not found:
-                        compMs1[mz] = i
+                        mzs.append(mz)
+        compMs1 = {}
+        for mz in mzs:
+            xs = []
+            ys = []
+            for s in samples:
+                rt = s["rt"]
+                ints = []
+                for mz2,i in s["ms1"].items():
+                    if 1e6 * np.abs(mz - mz2) / mz < massAcc:
+                        ints.append(i)
+                if len(ints) > 0:
+                    xs.append(rt)
+                    ys.append(np.sum(ints))
+
+            compMs1[mz] = np.trapz(ys,xs)
 
         isotopeScores = [scoreIsotopePattern(compMs1,f,samples[0]["mode"],massAcc) for f in formulas]
 
