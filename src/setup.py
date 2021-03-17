@@ -33,6 +33,6 @@ setup(
     'Programming Language :: Python :: 3.7',      #Specify which pyhton versions that you want to support
   ],
   package_data={
-    "":["*.pkl","*.zip"]
+    "":["*.pkl"]#,"*.zip"]
     }
 )
