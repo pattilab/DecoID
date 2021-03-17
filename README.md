@@ -27,6 +27,12 @@ lxml (v4.5.0)
 
 molmass (2020.6.10)
 
+keras (v2.4.3)
+
+tensorflow (v2.4.0)
+
+IsoSpecPy (v2.1.4)
+
 Memory usage can be very intensive when searching DIA data or MS/MS spectra acquired with wide isolation windows (>10 m/z). This may limit the number of parallel processes
 that can be run. If memory errors occur, reduce this value. 
 

@@ -794,6 +794,9 @@ class DecoID():
     :param resolution: int, Number of decimal places to consider for m/z values of MS/MS peaks
     :param label: str, optional label to add to the end of output files
     :param api_key: str, for use of mzCloud api, access key must be entered
+    :param mplus1PPM: float, ppm tolerance for finding subformulas in M+1 spectrum prediction. Set based on database
+    :param numConcurrentGroups: int, number of unique features to processes at once, if memory consumption is high, try reducing
+    :param scoringFunc: func, function to score metabolite ID matches. Defaults to the normalized dot product
     """
     def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15,numConcurrentGroups=20,scoringFunc=dotProductSpectra):
         self.numConcurrentMzGroups = numConcurrentGroups
