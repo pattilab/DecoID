@@ -7,3 +7,6 @@ pyteomics
 requests
 lxml
 molmass
+keras
+tensorflow
+IsoSpecPy
