@@ -3,31 +3,8 @@ import pickle as pkl
 from multiprocessing import Queue,Process
 from copy import deepcopy
 
-# library = "autoprocessing"
-#
-# if library == "reference":
-#     link = pkl.load(open("../src/DecoID/mzCloudCompound2TreeLinkagereference.pkl","rb"))
-#     prefix = "r"
-# else:
-#     link = pkl.load(open("../src/DecoID/mzCloudCompound2TreeLinkageautoprocessing.pkl","rb"))
-#     prefix = "a"
 mPlusOnePPM = 15
 numCores = 40
-# api_key = open("mzCloud_api_key.txt","r").readline().rstrip()
-# key = Keys(api_key)
-# db = {pol:{} for pol in link}
-# for pol in link:
-#     print(len(link[pol]))
-#     ind = 0
-#     for tree in link[pol]:
-#         specTree = mzCloudPy.getTrees([tree],key)
-#         ind += 1
-#
-#         if len(specTree) > 0:
-#             for specID in specTree[tree]:
-#                 db[pol][specID] = {"cpdID":prefix+str(tree[1]),"id":specID,"rt":tree[4],"formula":tree[3],"name":tree[2].replace(",","_"),"mode":pol,"spec":specTree[tree][specID],"m/z":tree[5]}
-#         if ind % 100 == 0:
-#             print(ind/len(link[pol]))
 
 def processCompoundGroup(cpd,spectraForCompounds,pol,q):
     specIDs = list(spectraForCompounds.keys())
@@ -48,8 +25,35 @@ def processCompoundGroup(cpd,spectraForCompounds,pol,q):
 library = "reference"
 if __name__ == '__main__':
 
-    db = pkl.load(open("../databases/mzCloud_reference.db","rb"))
-    db = {pol:{key:val for key,val in db[pol].items() if "M+1" not in val["cpdID"]} for pol in db}
+    library = "reference"
+
+    if library == "reference":
+        link = pkl.load(open("../src/DecoID/mzCloudCompound2TreeLinkage_InChIreference.pkl", "rb"))
+        prefix = ""
+    else:
+        link = pkl.load(open("../src/DecoID/mzCloudCompound2TreeLinkageautoprocessing.pkl", "rb"))
+        prefix = "a"
+
+    api_key = open("mzCloud_api_key.txt", "r").readline().rstrip()
+    key = Keys(api_key)
+    db = {pol: {} for pol in link}
+    for pol in link:
+        print(len(link[pol]))
+        ind = 0
+        for tree in link[pol]:
+            specTree = mzCloudPy.getTrees([tree], key)
+            ind += 1
+
+            if len(specTree) > 0:
+                for specID in specTree[tree]:
+                    db[pol][specID] = {"cpdID": prefix + str(tree[1]), "id": specID, "rt": tree[4], "formula": tree[3],
+                                       "name": tree[2].replace(",", "_"), "mode": pol, "spec": specTree[tree][specID],
+                                       "m/z": tree[5]}
+            if ind % 100 == 0:
+                print(ind / len(link[pol]))
+
+    #db = pkl.load(open("../databases/mzCloud_reference.db","rb"))
+    #db = {pol:{key:val for key,val in db[pol].items() if "M+1" not in val["cpdID"]} for pol in db}
     q = Queue()
     processes = []
     cpdsDict = {}
@@ -87,4 +91,4 @@ if __name__ == '__main__':
         if len(v["spec"]) > 0:
             db[m][k] = v
 
-    pkl.dump(db,open("../databases/mzCloud_"+library+"_correct.db","wb"))
+    pkl.dump(db,open("../databases/mzCloud_"+library+"_InChIKey.db","wb"))

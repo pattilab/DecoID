@@ -1984,14 +1984,13 @@ class mzCloudPy():
         linkage = {"Positive": [], "Negative": []}
         for page in range(1, numPages + 1):
             compounds = mzCloudPy.getCompoundList(page, keys,numPerPage, library=library)
-            # print(compounds)
             treeDict = {}
             for comp in compounds:
                 try:
                     formula = compounds[comp]["InChI"].split("/")[1]
                     tmp = molmass.Formula(formula)
                     mz = tmp.isotope.mass
-                    treeDict.update({(key, comp, compounds[comp]["SearchCompoundName"],formula,-1,mz): val for key, val in
+                    treeDict.update({(key, compounds[comp]["InChIKey"], compounds[comp]["SearchCompoundName"],formula,-1,mz): val for key, val in
                                  mzCloudPy.reformatSpectraDictList(compounds[comp]["SpectralTrees"]).items()})
                 except:
                     pass
@@ -2010,7 +2009,7 @@ class mzCloudPy():
                     pass
 
             print(float(page) * numPerPage / totalCompounds)
-        pkl.dump(linkage, open("../src/DecoID/mzCloudCompound2TreeLinkage" + library + ".pkl", "wb"), pkl.HIGHEST_PROTOCOL)
+        pkl.dump(linkage, open("../src/DecoID/mzCloudCompound2TreeLinkage_InChI" + library + ".pkl", "wb"), pkl.HIGHEST_PROTOCOL)
 
 
 
