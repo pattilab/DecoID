@@ -1,6 +1,8 @@
 # DecoID
 Metabolomics software for database-assisted deconvolution of MS/MS spectra
 
+[![DOI](https://zenodo.org/badge/267626315.svg)](https://zenodo.org/badge/latestdoi/267626315)
+
 ## System Requirements
 
 Standalone executible was built for Windows 10 64 bit
