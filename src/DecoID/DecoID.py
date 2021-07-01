@@ -217,7 +217,6 @@ def sharedFragmentScoring(found,ref,mz1,mz2,polarity):
         foundKeys = set({k for k,i in found.items() if i > 1e-5})
         refKeys = set({k for k,i in ref.items() if i > 1e-5})
         val =len(foundKeys.intersection(refKeys))/len(foundKeys.union(refKeys))
-        print(val)
     else:
         val = 0
 
@@ -1292,7 +1291,7 @@ class DecoID():
                         time.sleep(2)
             #write header
             outfile.write(
-                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,isotope_Error,Abundance,ComponentID,redundant\n")
+                "#featureID,isolation_center_m/z,rt,compound_m/z,compound_rt,compound_formula,DB_Compound_ID,Compound_Name,DB_Spectrum_ID,dot_product,ppm_Error,isotope_similiarity,Abundance,ComponentID,redundant\n")
             #start Q
             t = Thread(target=self.runQ, args=(
             q,outfile,threshold,self.outputDataFinal,self.filename + self.label + ".DecoID",
