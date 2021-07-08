@@ -3,6 +3,8 @@ Metabolomics software for database-assisted deconvolution of MS/MS spectra
 
 [![DOI](https://zenodo.org/badge/267626315.svg)](https://zenodo.org/badge/latestdoi/267626315)
 
+For further details on this software, please consult the associated publication: https://doi.org/10.1038/s41592-021-01195-3.
+
 ## System Requirements
 
 Standalone executible was built for Windows 10 64 bit
