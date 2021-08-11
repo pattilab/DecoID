@@ -213,14 +213,13 @@ def NNScoring(found,ref,mz1,mz2,polarity):
     return score
 
 def sharedFragmentScoring(found,ref,mz1,mz2,polarity):
-    if len(set(list(found.keys())).union(set(list(ref.keys())))) > 0:
+    if len(found) + len(ref) > 0:
         foundKeys = set({k for k,i in found.items() if i > 1e-5})
         refKeys = set({k for k,i in ref.items() if i > 1e-5})
         val =len(foundKeys.intersection(refKeys))/len(foundKeys.union(refKeys))
     else:
         val = 0
-
-    return logReg[polarity].predict_proba([[val]])[0][0]
+    return logReg[polarity].predict_proba([[val]])[0][1]
 
 
 
@@ -622,7 +621,45 @@ def inScanIso(fragments,candidate_mz,ppmThresh=10):
     else:
         return True
 
+def getCompMS1Spectrum(samples,massAcc):
+    # get isotope pattern match scores
+    mzs = []
+    for s in samples:
+        if "ms1" in s:
+            for mz, i in s["ms1"].items():
+                mzs.append(mz)
 
+    mzs = list(set(mzs))
+    mzDict = {}
+    for mz in mzs:
+        bounds = [mz - massAcc * mz / 1e6, mz + massAcc * mz / 1e6]
+        found = False
+        for mz2 in mzDict:
+            if mz2 > bounds[0] and mz2 < bounds[1]:
+                found = True
+                mzDict[mz2].append(mz)
+                break
+        if not found:
+            mzDict[mz] = [mz]
+
+
+    compMs1 = {}
+    for mz in mzDict.keys():
+        xs = []
+        ys = []
+        for s in samples:
+            rt = s["rt"]
+            ints = []
+            for mz2, i in s["ms1"].items():
+                if mz2 in mzDict[mz]:  # 1e6 * np.abs(mz - mz2) / mz < massAcc:
+                    ints.append(i)
+            if len(ints) > 0:
+                xs.append(rt)
+                ys.append(np.sum(ints))
+
+        compMs1[mz] = np.trapz(ys, xs)
+
+    return compMs1
 
 #https://stackoverflow.com/questions/12141150/from-list-of-integers-get-number-closest-to-a-given-value
 def takeClosest(myList, myNumber):
@@ -795,15 +832,16 @@ class DecoID():
     :param api_key: str, for use of mzCloud api, access key must be entered
     :param mplus1PPM: float, ppm tolerance for finding subformulas in M+1 spectrum prediction. Set based on database
     :param numConcurrentGroups: int, number of unique features to processes at once, if memory consumption is high, try reducing
-    :param scoringFunc: func, function to score metabolite ID matches. Defaults to the normalized dot product
+    :param scoringFunc: str, function to score metabolite ID matches. Defaults to the normalized dot product
     """
-    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15,numConcurrentGroups=20,scoringFunc=dotProductSpectra):
+    def __init__(self,libFile,mzCloud_lib,numCores=1,resolution = 2,label="",api_key="none",mplus1PPM = 15,numConcurrentGroups=20,scoringFunc="dot product"):
         self.numConcurrentMzGroups = numConcurrentGroups
         self.libFile = libFile
         self.useDBLock = False
         #read tsv library file
         self.mplus1PPM = mplus1PPM
-        self.scoringFunc = scoringFunc
+        mapper = {"dot product":dotProductSpectra,"NN":NNScoring,"shared fragment":sharedFragmentScoring}
+        self.scoringFunc = mapper[scoringFunc]
         #for msp library files
         if ".msp" in libFile:
             #try:
@@ -1635,35 +1673,6 @@ class DecoID():
         [metIDs, spectraIDs, matrix, masses, metNames, rts, formulas, indicesAll, reduceSpec] = getMatricesForGroup(trees, spectra,resolution, toAdd)
         isoIndices = [x for x in range(len(metIDs)) if "(M+1)" in metNames[x]]
 
-        #get isotope pattern match scores
-        mzs = []
-        for s in samples:
-            if "ms1" in s:
-                for mz,i in s["ms1"].items():
-                    found = False
-                    for mz2 in mzs:
-                        if 1e6 * np.abs(mz-mz2)/mz < massAcc:
-                            found = True
-                            break
-                    if not found:
-                        mzs.append(mz)
-        compMs1 = {}
-        for mz in mzs:
-            xs = []
-            ys = []
-            for s in samples:
-                rt = s["rt"]
-                ints = []
-                for mz2,i in s["ms1"].items():
-                    if 1e6 * np.abs(mz - mz2) / mz < massAcc:
-                        ints.append(i)
-                if len(ints) > 0:
-                    xs.append(rt)
-                    ys.append(np.sum(ints))
-
-            compMs1[mz] = np.trapz(ys,xs)
-
-        isotopeScores = [scoreIsotopePattern(compMs1,f,samples[0]["mode"],massAcc) for f in formulas]
 
 
         results = []
@@ -1689,6 +1698,10 @@ class DecoID():
 
             scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
                                                     masses, centerMz,rts, massAcc,rtTol,rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution,sample["mode"])
+
+            compMs1 = getCompMS1Spectrum(samples,massAcc)
+
+            isotopeScores = [scoreIsotopePattern(compMs1, f, samples[0]["mode"], massAcc) for f in formulas]
 
             result = {(met, specID, mass, name,r,formula,isoScore, safeDivide(comp, sum(resVector))): coeff for
                       met, name, specID, coeff, mass, comp,r,formula,isoScore in
@@ -1725,6 +1738,10 @@ class DecoID():
 
                         scores, components = scoreDeconvolution(combinedSpectrum, matrix, resVector, metIDs,
                                                                 masses, centerMz, rts, massAcc, rtTol, rt,redundancyCheckThresh,scoringFunc,indicesAll,resolution,sample["mode"])
+
+                        compMs1 = getCompMS1Spectrum([samples[x] for x in goodIndices], massAcc)
+
+                        isotopeScores = [scoreIsotopePattern(compMs1, f, samples[0]["mode"], massAcc) for f in formulas]
 
                         result = {(met, specID, mass, name, r, formula,isoScore, safeDivide(comp, sum(resVector))): coeff for
                                   met, name, specID, coeff, mass, comp, r, formula,isoScore in
