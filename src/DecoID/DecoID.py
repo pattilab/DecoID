@@ -694,6 +694,7 @@ def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=
    :param ppmWidth: float, Mass accuracy of insturment in parts per million
    :param offset: float, Isolation window width/2. Necessary for non-thermo data
    :param tic_cutoff: float, Signal cutoff for MS/MS spectra. Spectra below this signal level will be ignored
+   :param frag_cutoff: float, intensity cutoff for MS/MS peaks. Fragments with absolute intensity below this threshold will be removed
    :return: result-list of MS/MS spectra. Each spectrum is a dict giving the precursor mz, retention time, isolation window
     upper and lower bounds, TIC, contamination level, and scanID
     ms1Scans-dict where key is the retention time and the value is another dict of m/z:intensity pairs

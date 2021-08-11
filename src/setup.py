@@ -9,7 +9,7 @@ setup(
   author = 'Ethan Stancliffe',                   # Type in your name
   author_email = 'estancl1234@gmail.com',      # Type in your E-Mail
   url = 'https://github.com/e-stan/DecoID',   # Provide either the link to your github or to your website
-  download_url = 'https://github.com/e-stan/DecoID/archive/v0.2.9.tar.gz',    # I explain this later on
+  download_url = 'https://github.com/e-stan/DecoID/archive/v0.3.1.tar.gz',    # I explain this later on
   keywords = ['Metabolomics', 'Deconvolution', 'MS/MS',"Metabolite ID"],   # Keywords that define your package best
   install_requires=[            # I get to this in a second
           'numpy',
