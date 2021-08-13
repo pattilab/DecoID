@@ -14,8 +14,6 @@ lab=${10}
 frag_cutoff=${11}
 rtTol=${12}
 
-
-
 for filename in $directory*.mzML; do
     qsub -F "$filename $peakfile $db $ms1 $dda $iso $unk $lam $ma $lab $frag_cutoff $rtTol" /home/Estancliffe/DecoID/searchFile.sh
 done
