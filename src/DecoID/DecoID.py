@@ -738,7 +738,8 @@ def readRawDataFile(filename, maxMass, resolution, useMS1, ppmWidth = 50,offset=
                         #settings = filter.split("@")[1].split()[0]
                         #fragmentMode = settings[:3]
                         #NCE = float(settings[3:])
-                        CE = temp["precursorList"]["precursor"][0]["activation"]['collision energy']
+                        try: CE = temp["precursorList"]["precursor"][0]["activation"]['collision energy']
+                        except: CE = -1
                         rt = temp["scanList"]["scan"][0]["scan start time"]
                         mzs = list(zip(temp["m/z array"],temp["intensity array"]))
                         tempSpecs = []

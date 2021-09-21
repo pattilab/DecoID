@@ -16,6 +16,7 @@ file = "../exampleData/Asp-Mal_1uM_5Da.mzML"
 #filename of peak list
 peakFile = "../exampleData/peak_table.csv"
 
+
 #set parameters
 usePeaks = True
 DDA = True #data is DDA
