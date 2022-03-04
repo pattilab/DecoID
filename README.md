@@ -63,7 +63,7 @@ pip install DecoID/src/.
 
 ### Installation of Standalone Windows .exe for User Interface
 
-Download zip from http://pattilab.wustl.edu/software/DecoID
+Download zip from the latest release
 
 unzip file and run DecoIDGUI/DecoIDGUI.exe
 
