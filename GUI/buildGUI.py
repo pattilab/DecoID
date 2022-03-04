@@ -21,6 +21,7 @@ PyInstaller.__main__.run([
     '--add-binary=%s' % '../src/DecoID/model.zip;.',
     '--add-binary=%s' % '../src/DecoID/frac_shared_frag_log_reg_Negative.pkl;.',
     '--add-binary=%s' % '../src/DecoID/frac_shared_frag_log_reg_Positive.pkl;.',
+    #'--add-data=%s' % 'C:/Users/Ethan/AppData/Local/Programs/Python/Python37/Lib/site-packages/matplotlib/mpl-data/matplotlibrc;.',
     '-y',
     'decoIDGUI.py'])
 

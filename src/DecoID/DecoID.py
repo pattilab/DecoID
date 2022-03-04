@@ -9,7 +9,7 @@ if getattr(sys, 'frozen', False):
     application_path = os.path.dirname(sys.executable)
 elif __file__:
     application_path = os.path.dirname(__file__)
-from multiprocessing import Queue, Process,Manager,Value,Lock
+from multiprocessing import Queue, Process,Manager,Value,Lock,Pool
 from threading import Thread
 import time
 import gzip
@@ -58,6 +58,7 @@ logReg = {x:pkl.load(open(os.path.join(application_path,"frac_shared_frag_log_re
 timeout = 30
 CONCURRENTREQUESTMAX = 1
 MAXMASS = 5000
+maxMzForPrediction = 500
 
 import molmass
 import scipy.optimize as opt
@@ -468,8 +469,10 @@ def createM1SpectrumfromM0(spectra,formula,polarity,ppmError = 5):
             mPlus1,unique = createM1FromM0andFragAnnotation(spectra,masses,sub_forms,carbon_pos,bounds,ppmError)
         except:
             mPlus1 = {}
+            unique = False
     else:
         mPlus1 = {}
+        unique = False
 
     return mPlus1,unique#,{key:val[:,carbon_pos] for key,val in subsForFrags.items() if len(val) > 0}
 
@@ -810,7 +813,7 @@ def createDictFromString(string, resolution):
     return specDict
 
 
-def createM1Entry(m0Entry, mode, qu,ppm):
+def createM1Entry(m0Entry, mode,ppm):
     key = m0Entry["id"] + "_M1"
     val = dict(m0Entry)
     val["cpdID"] = val["cpdID"] + " (M+1)"
@@ -818,7 +821,8 @@ def createM1Entry(m0Entry, mode, qu,ppm):
     val["name"] = val["name"] + " (M+1)"
     val["id"] = val["id"] + "_M1"
     val["spec"],_ = createM1SpectrumfromM0(m0Entry["spec"], m0Entry["formula"], mode, ppm)
-    qu.put([key, val, mode])
+    #qu.put([key, val, mode])
+    return key,val,mode
 
 class DecoID():
     """
@@ -921,32 +925,44 @@ class DecoID():
                         looking = True
                 print("Library loaded successfully: " + str(len(self.library["Positive"]) + len(self.library["Negative"])) + " spectra found")
                 print("Predicting M+1 now...")
-                q = Queue()
+                #q = Queue()
+                p = Pool(numCores)
+                args = []
 
-                processes = []
+                #processes = []
                 toIts = {p:list(self.library[p].keys()) for p in self.library}
                 for pol in toIts:
                     for key in toIts[pol]:
                         entry = self.library[pol][key]
-                        p = Process(target=createM1Entry,args=(entry,pol,q,self.mplus1PPM))
-                        while len(processes) >= numCores:
-                            if not q.empty():
-                                k,v,m = q.get()
-                                if len(v) > 0:
-                                    self.library[m][k] = v
-                            processes = [x for x in processes if x.is_alive()]
-                        p.start()
-                        processes.append(p)
-                while len(processes) > 0:
-                    if not q.empty():
-                        k, v, m = q.get()
-                        if len(v) > 0:
-                            self.library[m][k] = v
-                    processes = [x for x in processes if x.is_alive()]
-                while not q.empty():
-                    k, v, m = q.get()
-                    if len(v) > 0:
+                        if entry["m/z"] < maxMzForPrediction:
+                            args.append([entry,pol,self.mplus1PPM])
+                results = p.starmap(createM1Entry,args)
+                p.close()
+                p.join()
+                for k,v,m in results:
+                    if len(v["spec"]) > 0:
                         self.library[m][k] = v
+                        #p = Process(target=createM1Entry,args=(entry,pol,q,self.mplus1PPM))
+                        #while len(processes) >= numCores:
+                        #    if not q.empty():
+                        #        k,v,m = q.get()
+                        #        if len(v) > 0:
+                        #            self.library[m][k] = v
+                        #    processes = [x for x in processes if x.is_alive()]
+                        #p.start()
+                        #processes.append(p)
+                #while len(processes) > 0:
+                #    if not q.empty():
+                #        k, v, m = q.get()
+                #        if len(v) > 0:
+                #            self.library[m][k] = v
+                #    processes = [x for x in processes if x.is_alive()]
+                #while not q.empty():
+                #    k, v, m = q.get()
+                #    if len(v) > 0:
+                #        self.library[m][k] = v
+
+
                 pkl.dump(self.library,open(libFile.replace(".msp",".db"),"wb"))
 
                 self.lib = customDBpy
