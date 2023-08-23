@@ -85,15 +85,20 @@ def collapseAsNeeded(spectra,targetRes):
 def solveSystem(S,o,resPenalty,maxQuant=1000):
     return deconvolveLASSO(np.transpose(S), [[x] for x in o], [0 for _ in S], [maxQuant for _ in S], resPenalty=resPenalty)
 
-def normalizeSpectra(spectra,method="sum"):
-    if method == "sum": maxSpec = np.sum(spectra)
-    else: maxSpec = np.max(spectra)
-    if np.isinf(np.power(np.float(maxSpec/maxSpec),2)) or np.isnan(np.power(np.float(maxSpec/maxSpec),2)):
+def normalizeSpectra(spectra, method="sum"):
+    if method == "sum": 
+        maxSpec = np.sum(spectra)
+    else: 
+        maxSpec = np.max(spectra)
+        
+    # Check if maxSpec is zero or NaN
+    if maxSpec == 0 or np.isnan(maxSpec):
         return [0.0 for x in spectra]
+    
     normSpec = [x/maxSpec for x in spectra]
     if np.max(normSpec) > 1.1:
         return [0.0 for x in spectra]
-    return [x/maxSpec for x in spectra]
+    return normSpec
 
 def isPossible(query,candidate,threshold=.75):
     if len(candidate.keys()) == 0:
