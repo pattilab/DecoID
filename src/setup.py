@@ -13,7 +13,7 @@ setup(
   keywords = ['Metabolomics', 'Deconvolution', 'MS/MS',"Metabolite ID"],   # Keywords that define your package best
   install_requires=[            # I get to this in a second
           'numpy',
-          'sklearn',
+          'scikit-learn',
           'pandas',
           'dill',
           'scipy',

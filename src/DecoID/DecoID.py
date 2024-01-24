@@ -85,15 +85,20 @@ def collapseAsNeeded(spectra,targetRes):
 def solveSystem(S,o,resPenalty,maxQuant=1000):
     return deconvolveLASSO(np.transpose(S), [[x] for x in o], [0 for _ in S], [maxQuant for _ in S], resPenalty=resPenalty)
 
-def normalizeSpectra(spectra,method="sum"):
-    if method == "sum": maxSpec = np.sum(spectra)
-    else: maxSpec = np.max(spectra)
-    if np.isinf(np.power(np.float(maxSpec/maxSpec),2)) or np.isnan(np.power(np.float(maxSpec/maxSpec),2)):
+def normalizeSpectra(spectra, method="sum"):
+    if method == "sum": 
+        maxSpec = np.sum(spectra)
+    else: 
+        maxSpec = np.max(spectra)
+        
+    # Check if maxSpec is zero or NaN
+    if maxSpec == 0 or np.isnan(maxSpec):
         return [0.0 for x in spectra]
+    
     normSpec = [x/maxSpec for x in spectra]
     if np.max(normSpec) > 1.1:
         return [0.0 for x in spectra]
-    return [x/maxSpec for x in spectra]
+    return normSpec
 
 def isPossible(query,candidate,threshold=.75):
     if len(candidate.keys()) == 0:
@@ -163,14 +168,20 @@ def dotProductSpectra(foundSpectra,b,mz1=-1,mz2=-1,polarity=-1):
         mzs = set(foundSpectra.keys()).intersection(set(b.keys())) #get shared mzs
         num = np.sum([foundSpectra[x]*b[x] for x in mzs]) #compute num
         denom = np.sqrt(np.sum([x**2 for x in foundSpectra.values()])*sum([x**2 for x in b.values()])) #compute denom
-        val = num/denom
     #if input spectra are lists
     else:
         b = flatten(b) #flatten spectra
         foundSpectra = flatten(foundSpectra)
-        val = np.sum([x*y for x,y in zip(b,foundSpectra) if x > 1e-4 or y > 1e-4])/np.sqrt(np.sum([x**2 for x in foundSpectra])*(np.sum( #compute value
-                [x**2 for x in b])))
-    if np.isnan(val): val = 0
+        num = np.sum([x*y for x,y in zip(b,foundSpectra) if x > 1e-4 or y > 1e-4])
+        denom = np.sqrt(np.sum([x**2 for x in foundSpectra])*(np.sum([x**2 for x in b])))
+
+    if denom == 0:
+        val = 0
+    else:
+        val = num/denom
+        if np.isnan(val):
+            val = 0
+
     return val
 
 def safeNormalize(vec):
